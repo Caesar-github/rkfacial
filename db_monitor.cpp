@@ -1,0 +1,377 @@
+/*
+ * Copyright (C) 2019 Rockchip Electronics Co., Ltd.
+ * author: Zhihua Wang, hogan.wang@rock-chips.com
+ *
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL), available from the file
+ * COPYING in the main directory of this source tree, or the
+ * OpenIB.org BSD license below:
+ *
+ *     Redistribution and use in source and binary forms, with or
+ *     without modification, are permitted provided that the following
+ *     conditions are met:
+ *
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
+ *
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+#include "db_monitor.h"
+#include "video_common.h"
+#include <stdio.h>
+
+#ifdef USE_WEB_SERVER
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <ctype.h>
+#include <inttypes.h>
+#include <pthread.h>
+#include <assert.h>
+
+#include <json-c/json.h>
+#include <glib.h>
+
+#include <IPCProtocol.h>
+#include <dbserver.h>
+#include <storage_manager.h>
+
+#include "rockface_control.h"
+
+#define DBSERVER  "rockchip.dbserver"
+#define DBSERVER_PATH      "/"
+#define DBSERVER_EVENT_INTERFACE DBSERVER ".event"
+
+#include <list>
+
+struct json_data {
+    int id;
+    char *path;
+};
+
+static std::list<int> g_fail_id;
+static std::list<struct json_data*> g_json;
+static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static pthread_t g_th;
+static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_cond = PTHREAD_COND_INITIALIZER;
+static bool g_flag;
+
+static void db_monitor_wait(void)
+{
+    pthread_mutex_lock(&g_mutex);
+    if (g_flag)
+        pthread_cond_wait(&g_cond, &g_mutex);
+    g_flag = true;
+    pthread_mutex_unlock(&g_mutex);
+}
+
+static void db_monitor_signal(void)
+{
+    pthread_mutex_lock(&g_mutex);
+    g_flag = false;
+    pthread_cond_signal(&g_cond);
+    pthread_mutex_unlock(&g_mutex);
+}
+
+static void db_monitor_check(void);
+static void *db_monitor_thread(void *arg)
+{
+    int id = -1;
+    struct json_data *data = NULL;
+
+    sleep(10); // don't need start at boot
+    db_monitor_check();
+
+    while (1) {
+        id = -1;
+        if (data) {
+            if (data->path)
+                free(data->path);
+            free(data);
+            data = NULL;
+        }
+        pthread_mutex_lock(&g_lock);
+        if (g_json.empty() && g_fail_id.empty()) {
+            pthread_mutex_unlock(&g_lock);
+            db_monitor_wait();
+        } else if (!g_json.empty()){
+            data = g_json.front();
+            g_json.pop_front();
+            pthread_mutex_unlock(&g_lock);
+        } else if (!g_fail_id.empty()) {
+            id = g_fail_id.front();
+            g_fail_id.pop_front();
+            pthread_mutex_unlock(&g_lock);
+        }
+        if (id != -1) {
+            dbserver_face_load_complete(id, -1);
+            printf("%s: Update fail: %d\n", __func__, id);
+            continue;
+        }
+        if (!data)
+            continue;
+
+        if (data->path) {
+            if (rockface_control_add(data->id, data->path, NULL))
+                dbserver_face_load_complete(data->id, -1);
+            else
+                dbserver_face_load_complete(data->id, 1);
+            printf("Update: id = %d, path = %s\n", data->id, data->path);
+        } else {
+            rockface_control_delete(data->id, false);
+            printf("Delete: id = %d\n", data->id);
+        }
+
+        usleep(10000);
+    }
+    pthread_exit(NULL);
+}
+
+void db_monitor_run(void *json_str)
+{
+    if (!json_str) {
+        printf("%s error!\n", __func__);
+        return;
+    }
+    json_object *j_cfg = json_tokener_parse((const char*)json_str);
+    json_object *j_table = json_object_object_get(j_cfg, "table");
+
+    const char *table = json_object_get_string(j_table);
+    if (!strstr(table, "FaceList")) {
+        json_object_put(j_cfg);
+        return;
+    }
+
+    json_object *j_key = json_object_object_get(j_cfg, "key");
+    json_object *j_id = json_object_object_get(j_key, "id");
+    json_object *j_data = json_object_object_get(j_cfg, "data");
+    json_object *j_cmd = json_object_object_get(j_cfg, "cmd");
+
+    int id = json_object_get_int(j_id);
+    const char *cmd = json_object_get_string(j_cmd);
+
+    if (cmd && strstr(cmd, "Update")) {
+        json_object *j_note = json_object_object_get(j_data, "sNote");
+        const char *note = json_object_get_string(j_note);
+        if (note && !strstr(note, "undone")) {
+            json_object *j_path = json_object_object_get(j_data, "sPicturePath");
+            const char *path = json_object_get_string(j_path);
+            if (path) {
+                struct json_data *data = (struct json_data*)calloc(sizeof(struct json_data), 1);
+                if (data) {
+                    data->id = id;
+                    data->path = strdup(path);
+                    if (data->path) {
+                        pthread_mutex_lock(&g_lock);
+                        g_json.push_back(data);
+                        pthread_mutex_unlock(&g_lock);
+                    } else {
+                        free(data);
+                        pthread_mutex_lock(&g_lock);
+                        g_fail_id.push_back(id);
+                        pthread_mutex_unlock(&g_lock);
+                    }
+                } else {
+                    pthread_mutex_lock(&g_lock);
+                    g_fail_id.push_back(id);
+                    pthread_mutex_unlock(&g_lock);
+                }
+                db_monitor_signal();
+            }
+        }
+    }
+    if (cmd && strstr(cmd, "Delete")) {
+        struct json_data *data = (struct json_data*)calloc(sizeof(struct json_data), 1);
+        if (data) {
+            data->id = id;
+            pthread_mutex_lock(&g_lock);
+            g_json.push_back(data);
+            pthread_mutex_unlock(&g_lock);
+            db_monitor_signal();
+        } else {
+            printf("%s: Delete fail: %d\n", __func__, id);
+        }
+    }
+
+    json_object_put(j_cfg);
+}
+
+void db_monitor_storage_init(void)
+{
+    char *json_str = NULL;
+    printf("%s\n", __func__);
+    do {
+        json_str = dbserver_get_storage_media_folder();
+        if (json_str)
+            break;
+        usleep(100000);
+    } while (1);
+
+    json_object *j_config = json_tokener_parse(json_str);
+    json_object *j_data = json_object_object_get(j_config, "jData");
+    if (j_data) {
+        int num = json_object_array_length(j_data);
+        for (int i = 0; i < num; i++) {
+            json_object *j_obj = json_object_array_get_idx(j_data, i);
+            int camid = (int)json_object_get_int(json_object_object_get(j_obj, "iCamId"));
+            int type = (int)json_object_get_int(json_object_object_get(j_obj, "iType"));
+            switch (type) {
+            case TYPE_VIDEO:
+                dbserver_update_storage_media_folder_duty(camid, type, 0, -1);
+                break;
+            case TYPE_PHOTO:
+                dbserver_update_storage_media_folder_duty(camid, type, 0, -1);
+                break;
+            case TYPE_BLACK_LIST:
+                dbserver_update_storage_media_folder_duty(camid, type, 10, -1);
+                break;
+            case TYPE_SNAPSHOT:
+                dbserver_update_storage_media_folder_duty(camid, type, 40, -1);
+                break;
+            case TYPE_WHITE_LIST:
+                dbserver_update_storage_media_folder_duty(camid, type, 50, -1);
+                break;
+            default:
+                printf("%s: type error\n", __func__);
+                break;
+            }
+        }
+    }
+
+    json_object_put(j_config);
+    g_free(json_str);
+}
+
+static void db_monitor_get_media_path(int type, char *path, size_t size)
+{
+    char *json_str = NULL;
+    int status;
+    json_object *j_config;
+
+    printf("%s: type = %d\n", __func__, type);
+    do {
+        json_str = storage_manager_get_media_path();
+        if (json_str) {
+            j_config = json_tokener_parse(json_str);
+            json_object *j_status = json_object_object_get(j_config, "iStatus");
+            status = json_object_get_int(j_status);
+        } else {
+            usleep(100000);
+            continue;
+        }
+        if (status)
+            break;
+        json_object_put(j_config);
+        g_free(json_str);
+        usleep(100000);
+    } while (1);
+
+    json_object *j_array = json_object_object_get(j_config, "sScanPath");
+    if (j_array) {
+        int num = json_object_array_length(j_array);
+        for (int i = 0; i < num; i++) {
+            json_object *j_obj = json_object_array_get_idx(j_array, i);
+            int t = (int)json_object_get_int(json_object_object_get(j_obj, "iType"));
+            if (t == type) {
+                const char *p = json_object_get_string(json_object_object_get(j_obj, "sMediaPath"));
+                strncpy(path, p, size - 1);
+                break;
+            }
+        }
+    }
+
+    json_object_put(j_config);
+    g_free(json_str);
+}
+
+void db_monitor_init()
+{
+    if (pthread_create(&g_th, NULL, db_monitor_thread, NULL)) {
+        printf("%s create thread failed!\n", __func__);
+        return;
+    }
+}
+
+static void db_monitor_check(void)
+{
+    char *json_str = NULL;
+
+    db_monitor_storage_init();
+
+    db_monitor_get_media_path(TYPE_SNAPSHOT, g_snapshot, sizeof(g_snapshot));
+    db_monitor_get_media_path(TYPE_BLACK_LIST, g_black_list, sizeof(g_black_list));
+    db_monitor_get_media_path(TYPE_WHITE_LIST, g_white_list, sizeof(g_white_list));
+    if (check_path_dir(g_snapshot))
+        printf("check %s error\n", g_snapshot);
+    if (check_path_dir(g_white_list))
+        printf("check %s error\n", g_white_list);
+    if (check_path_dir(g_black_list))
+        printf("check %s error\n", g_black_list);
+
+    json_str = dbserver_event_get("FaceConfig");
+    if (json_str) {
+        printf("FaceConfig: %s\n", json_str);
+        free(json_str);
+    }
+
+    dbus_monitor_signal_registered(DBSERVER_EVENT_INTERFACE, "DataChanged", &db_monitor_run);
+}
+
+void db_monitor_face_list_add(int id, char *path, char *name, char *type)
+{
+    dbserver_face_list_add(id, path, name, type);
+    dbserver_face_load_complete(id, 1);
+}
+
+void db_monitor_face_list_delete(int id)
+{
+    dbserver_face_list_delete(id);
+}
+
+void db_monitor_snapshot_record_set(char *path)
+{
+    dbserver_snapshot_record_set(path);
+}
+
+void db_monitor_control_record_set(int face_id, char *path, char *status, char *similarity)
+{
+    dbserver_control_record_set(face_id, path, status, similarity);
+}
+#else
+void db_monitor_init()
+{
+    snprintf(g_snapshot, sizeof(g_snapshot), "/userdata/snapshot");
+    snprintf(g_black_list, sizeof(g_black_list), "/userdata/black_list");
+    snprintf(g_white_list, sizeof(g_white_list), "/userdata/white_list");
+    if (check_path_dir(g_snapshot))
+        printf("check %s error\n", g_snapshot);
+    if (check_path_dir(g_white_list))
+        printf("check %s error\n", g_white_list);
+    if (check_path_dir(g_black_list))
+        printf("check %s error\n", g_black_list);
+}
+void db_monitor_face_list_add(int id, char *path, char *name, char *type) {}
+void db_monitor_face_list_delete(int id) {}
+void db_monitor_snapshot_record_set(char *path) {}
+void db_monitor_control_record_set(int face_id, char *path, char *status, char *similarity) {}
+#endif

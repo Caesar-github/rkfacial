@@ -150,7 +150,7 @@ static void check_pre_path(const char *pre)
         fp = popen(cmd, "r");
         if (fp) {
             size = fread(buffer, 1, sizeof(buffer), fp);
-            fclose(fp);
+            pclose(fp);
             if (size > 0)
                 break;
         }

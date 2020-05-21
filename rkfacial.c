@@ -60,6 +60,9 @@ int rkfacial_init(void)
 
     usb_camera_init();
 
+    play_wav_thread_init();
+    play_wav_signal(WELCOME_WAV);
+
     rockface_control_init_thread();
 
     db_monitor_init();

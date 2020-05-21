@@ -164,11 +164,7 @@ static void *init_thread(void *arg)
     check_pre_path(PRE_PATH);
     int ret = rockface_control_init();
 
-    play_wav_thread_init();
-
-    if (ret == 0)
-        play_wav_signal(WELCOME_WAV);
-    else
+    if (ret)
         play_wav_signal(AUTHORIZE_FAIL_WAV);
 
     pthread_detach(pthread_self());

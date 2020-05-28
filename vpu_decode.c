@@ -149,6 +149,7 @@ int vpu_decode_jpeg_doing(struct vpu_decode* decode, void* in_data, RK_S32 in_si
 
     mpp_packet_init_with_buffer(&packet, str_buf); /* input */
     mpp_frame_set_buffer(frame, pic_buf);          /* output */
+    mpp_packet_set_length(packet, decode->pkt_size);
 
     // printf("mpp import input fd %d output fd %d\n",
     //        mpp_buffer_get_fd(str_buf), mpp_buffer_get_fd(pic_buf));

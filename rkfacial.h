@@ -5,6 +5,27 @@
 extern "C" {
 #endif
 
+#include <stdbool.h>
+
+struct user_info {
+    unsigned int id;
+    char sPicturePath[256];
+    char sRegistrationTime[32];
+    unsigned int iAge;
+    char sListType[32];
+    char sType[32];
+    char sName[256];
+    char sGender[32];
+    char sNation[32];
+    char sCertificateType[32];
+    char sCertificateNumber[32];
+    char sBirthday[32];
+    char sTelephoneNumber[32];
+    char sHometown[32];
+    char sAddress[32];
+    unsigned int iAccessCardNumber;
+};
+
 typedef void (*display_callback)(void *ptr, int fd, int fmt, int w, int h, int rotation);
 
 void set_isp_param(int width, int height, display_callback cb, bool expo);
@@ -21,9 +42,9 @@ typedef void (*rkfacial_paint_box_callback)(int left, int top, int right, int bo
 void register_rkfacial_paint_box(rkfacial_paint_box_callback cb);
 extern rkfacial_paint_box_callback rkfacial_paint_box_cb;
 
-typedef void (*rkfacial_paint_name_callback)(char *name, bool real);
-void register_rkfacial_paint_name(rkfacial_paint_name_callback cb);
-extern rkfacial_paint_name_callback rkfacial_paint_name_cb;
+typedef void (*rkfacial_paint_info_callback)(struct user_info *info, bool real);
+void register_rkfacial_paint_info(rkfacial_paint_info_callback cb);
+extern rkfacial_paint_info_callback rkfacial_paint_info_cb;
 
 #ifdef __cplusplus
 }

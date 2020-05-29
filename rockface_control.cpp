@@ -778,8 +778,8 @@ static void *rockface_control_thread(void *arg)
             del_timeout = 0;
             g_delete = false;
             play_wav_signal(DELETE_SUCCESS_WAV);
-            if (rkfacial_paint_name_cb)
-                rkfacial_paint_name_cb(NULL, false);
+            if (rkfacial_paint_info_cb)
+                rkfacial_paint_info_cb(NULL, false);
         } else if (result && face.score > FACE_SCORE_RGB) {
             if (database_is_id_exist(result->id, result_name, NAME_LEN)) {
                 if (rkcif_control_run()) {
@@ -787,8 +787,13 @@ static void *rockface_control_thread(void *arg)
                         if (rockface_control_liveness_ir())
                             real = true;
                 }
-                if (rkfacial_paint_name_cb)
-                    rkfacial_paint_name_cb(result_name, real);
+                if (rkfacial_paint_info_cb) {
+                    struct user_info info;
+                    memset(&info, 0, sizeof(info));
+                    strncpy(info.sPicturePath, result_name, sizeof(info.sPicturePath) - 1);
+                    db_monitor_get_user_info(&info, result->id);
+                    rkfacial_paint_info_cb(&info, real);
+                }
                 if (!g_register && real && memcmp(last_name, result_name, sizeof(last_name))) {
                     char status[64];
                     char similarity[64];
@@ -815,8 +820,8 @@ static void *rockface_control_thread(void *arg)
                 }
             }
         } else {
-            if (rkfacial_paint_name_cb)
-                rkfacial_paint_name_cb(NULL, false);
+            if (rkfacial_paint_info_cb)
+                rkfacial_paint_info_cb(NULL, false);
         }
         if (!real) {
             memset(last_name, 0, sizeof(last_name));

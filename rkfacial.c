@@ -99,8 +99,8 @@ void register_rkfacial_paint_box(rkfacial_paint_box_callback cb)
     rkfacial_paint_box_cb = cb;
 }
 
-rkfacial_paint_name_callback rkfacial_paint_name_cb = NULL;
-void register_rkfacial_paint_name(rkfacial_paint_name_callback cb)
+rkfacial_paint_info_callback rkfacial_paint_info_cb = NULL;
+void register_rkfacial_paint_info(rkfacial_paint_info_callback cb)
 {
-    rkfacial_paint_name_cb = cb;
+    rkfacial_paint_info_cb = cb;
 }

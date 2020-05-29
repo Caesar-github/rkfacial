@@ -37,11 +37,14 @@
 extern "C" {
 #endif
 
+#include "rkfacial.h"
+
 void db_monitor_init();
 void db_monitor_face_list_add(int id, char *path, char *name, char *type);
 void db_monitor_face_list_delete(int id);
 void db_monitor_snapshot_record_set(char *path);
 void db_monitor_control_record_set(int face_id, char *path, char *status, char *similarity);
+void db_monitor_get_user_info(struct user_info *info, int i);
 
 #ifdef __cplusplus
 }

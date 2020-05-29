@@ -386,6 +386,44 @@ void db_monitor_control_record_set(int face_id, char *path, char *status, char *
 {
     dbserver_control_record_set(face_id, path, status, similarity);
 }
+
+
+void db_monitor_get_user_info(struct user_info *info, int i)
+{
+    char *json_str = NULL;
+
+    json_str = dbserver_event_get_by_id(TABLE_FACE_LIST, i);
+    if (json_str) {
+        json_object *j_cfg = json_tokener_parse((const char*)json_str);
+        json_object *j_data = json_object_object_get(j_cfg, "jData");
+        json_object *j_obj = json_object_array_get_idx(j_data, 0);
+#define COPY_INT(x) info->x = json_object_get_int(json_object_object_get(j_obj, #x))
+#define COPY_STRING(x) \
+        do { \
+            if (json_object_get_string(json_object_object_get(j_obj, #x))) \
+                strncpy(info->x, json_object_get_string(json_object_object_get(j_obj, #x)), sizeof(info->x) - 1); \
+        } while (0)
+        COPY_INT(id);
+        COPY_STRING(sPicturePath);
+        COPY_STRING(sRegistrationTime);
+        COPY_INT(iAge);
+        COPY_STRING(sListType);
+        COPY_STRING(sType);
+        COPY_STRING(sName);
+        COPY_STRING(sGender);
+        COPY_STRING(sNation);
+        COPY_STRING(sCertificateType);
+        COPY_STRING(sCertificateNumber);
+        COPY_STRING(sBirthday);
+        COPY_STRING(sTelephoneNumber);
+        COPY_STRING(sHometown);
+        COPY_INT(iAccessCardNumber);
+        json_object_put(j_cfg);
+        free(json_str);
+    } else {
+        printf("%s %d failed\n", __func__, i);
+    }
+}
 #else
 void db_monitor_init()
 {
@@ -403,4 +441,5 @@ void db_monitor_face_list_add(int id, char *path, char *name, char *type) {}
 void db_monitor_face_list_delete(int id) {}
 void db_monitor_snapshot_record_set(char *path) {}
 void db_monitor_control_record_set(int face_id, char *path, char *status, char *similarity) {}
+void db_monitor_get_user_info(struct user_info *info, int id) {}
 #endif

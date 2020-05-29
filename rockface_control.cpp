@@ -409,16 +409,16 @@ static bool rockface_control_search(rockface_image_t *image, void *data, int *in
 
 void rockface_control_set_delete(void)
 {
-    g_delete = false;
-    if (g_register_cnt == 0)
-        g_register = true;
+    g_register = false;
+    g_register_cnt = 0;
+    g_delete = true;
 }
 
 void rockface_control_set_register(void)
 {
-    g_register = false;
-    g_register_cnt = 0;
-    g_delete = true;
+    g_delete = false;
+    if (g_register_cnt == 0)
+        g_register = true;
 }
 
 static void rockface_control_detect_wait(void)

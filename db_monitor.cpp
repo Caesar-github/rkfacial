@@ -93,13 +93,42 @@ static void db_monitor_signal(void)
     pthread_mutex_unlock(&g_mutex);
 }
 
+static bool is_command_success(const char *cmd)
+{
+    char buffer[128];
+    FILE *fp;
+    int num;
+    bool result = false;
+
+    fp = popen(cmd, "r");
+    if (fp != NULL) {
+        num = fread(buffer, 1, sizeof(buffer), fp);
+        if (num > 0)
+            result = true;
+        pclose(fp);
+    }
+
+    return result;
+}
+
 static void db_monitor_check(void);
 static void *db_monitor_thread(void *arg)
 {
     int id = -1;
     struct json_data *data = NULL;
 
-    sleep(10); // don't need start at boot
+    while (!is_command_success("pidof dbserver")) {
+        printf("check dbserver failed!\n");
+        sleep(1);
+    }
+    while (!is_command_success("pidof netserver")) {
+        printf("check netserver failed!\n");
+        sleep(1);
+    }
+    while (!is_command_success("pidof storage_manager")) {
+        printf("check storage_manager failed!\n");
+        sleep(1);
+    }
     db_monitor_check();
 
     while (1) {

@@ -45,6 +45,13 @@
 static sqlite3 *g_db = NULL;
 static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+void database_bak(void)
+{
+    char cmd[256];
+    snprintf(cmd, sizeof(cmd), "cp %s %s", DATABASE_PATH, BAK_DATABASE_PATH);
+    system(cmd);
+}
+
 int database_init(void)
 {
     char *err;
@@ -63,6 +70,7 @@ int database_init(void)
         printf("%s create table %s failed!\n", __func__, DATABASE_TABLE);
         return -1;
     }
+    database_bak();
 
     return 0;
 }
@@ -70,6 +78,7 @@ int database_init(void)
 void database_exit(void)
 {
     sqlite3_close(g_db);
+    database_bak();
 }
 
 int database_insert(void *data, size_t size, const char *name, size_t n_size, int id, bool sync_flag)
@@ -94,6 +103,7 @@ int database_insert(void *data, size_t size, const char *name, size_t n_size, in
     sqlite3_exec(g_db, "commit transaction", NULL, NULL, NULL);
     if (sync_flag)
         sync();
+    database_bak();
     pthread_mutex_unlock(&g_mutex);
 
     return 0;
@@ -289,5 +299,6 @@ void database_delete(int id, bool sync_flag)
     sqlite3_exec(g_db, "commit transaction", NULL, NULL, NULL);
     if (sync_flag)
         sync();
+    database_bak();
     pthread_mutex_unlock(&g_mutex);
 }

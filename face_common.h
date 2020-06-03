@@ -41,7 +41,10 @@ extern "C" {
 
 #include "rockface_control.h"
 
-#define DATABASE_PATH "/oem/face_data.db"
+#define PRE_PATH "/oem"
+#define BAK_PATH "/userdata"
+#define DATABASE_PATH PRE_PATH "/face_data.db"
+#define BAK_DATABASE_PATH BAK_PATH "/face_data.db"
 #define NAME_LEN 256
 #define USER_NAME "User"
 

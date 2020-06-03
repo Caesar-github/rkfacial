@@ -38,6 +38,7 @@
 extern "C" {
 #endif
 
+void database_bak(void);
 int database_init(void);
 void database_exit(void);
 int database_insert(void *data, size_t size, const char *name, size_t n_size, int id, bool sync_flag);

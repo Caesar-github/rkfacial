@@ -63,8 +63,8 @@
 #define FACE_SCORE_REGISTER 0.9999
 #define FACE_REGISTER_CNT 5
 #define FACE_REAL_SCORE 0.7
-#define PRE_PATH "/oem"
 #define LICENCE_PATH PRE_PATH "/key.lic"
+#define BAK_LICENCE_PATH BAK_PATH "/key.lic"
 #define FACE_DATA_PATH "/usr/lib"
 #define MIN_FACE_WIDTH(w) ((w) / 5)
 #define FACE_TRACK_FRAME 0
@@ -161,11 +161,19 @@ static void check_pre_path(const char *pre)
 
 static void *init_thread(void *arg)
 {
+    char cmd[256];
+
     check_pre_path(PRE_PATH);
     int ret = rockface_control_init();
 
     if (ret)
         play_wav_signal(AUTHORIZE_FAIL_WAV);
+
+    check_pre_path(BAK_PATH);
+    snprintf(cmd, sizeof(cmd), "cp %s %s", LICENCE_PATH, BAK_LICENCE_PATH);
+    system(cmd);
+
+    database_bak();
 
     pthread_detach(pthread_self());
     pthread_exit(NULL);
@@ -831,11 +839,20 @@ int rockface_control_init(void)
     int width = g_face_width;
     int height = g_face_height;
     rockface_ret_t ret;
+    char cmd[256];
 
     if (!g_face_en)
         return 0;
 
     face_handle = rockface_create_handle();
+
+    if (access(LICENCE_PATH, F_OK)) {
+        check_pre_path(BAK_PATH);
+        if (access(BAK_LICENCE_PATH, F_OK) == 0) {
+            snprintf(cmd, sizeof(cmd), "cp %s %s", BAK_LICENCE_PATH, LICENCE_PATH);
+            system(cmd);
+        }
+    }
 
     ret = rockface_set_licence(face_handle, LICENCE_PATH);
     if (ret != ROCKFACE_RET_SUCCESS) {
@@ -880,6 +897,13 @@ int rockface_control_init(void)
         return -1;
     }
 
+    if (access(DATABASE_PATH, F_OK)) {
+        check_pre_path(BAK_PATH);
+        if (access(BAK_DATABASE_PATH, F_OK) == 0) {
+            snprintf(cmd, sizeof(cmd), "cp %s %s", BAK_DATABASE_PATH, DATABASE_PATH);
+            system(cmd);
+        }
+    }
     if (access(DATABASE_PATH, F_OK) == 0) {
         printf("load face feature from %s\n", DATABASE_PATH);
         if (database_init())

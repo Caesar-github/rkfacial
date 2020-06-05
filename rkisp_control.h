@@ -39,8 +39,7 @@ extern "C" {
 
 int rkisp_control_init(void);
 void rkisp_control_exit(void);
-void rkisp_control_expo_weights_270(int left, int top, int right, int bottom);
-void rkisp_control_expo_weights_90(int left, int top, int right, int bottom);
+void rkisp_control_expo_weights(int left, int top, int right, int bottom);
 void rkisp_control_expo_weights_default(void);
 
 #ifdef __cplusplus

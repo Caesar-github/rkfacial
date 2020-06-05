@@ -75,6 +75,15 @@ static bool g_usb_en;
 static int g_usb_width;
 static int g_usb_height;
 static display_callback g_display_cb = NULL;
+static int g_rotation = HAL_TRANSFORM_ROT_90;
+
+void set_usb_rotation(int angle)
+{
+    if (angle == 90)
+        g_rotation = HAL_TRANSFORM_ROT_90;
+    else if (angle == 270)
+        g_rotation = HAL_TRANSFORM_ROT_270;
+}
 
 void set_usb_param(int width, int height, display_callback cb)
 {
@@ -272,11 +281,11 @@ static void *process(void *arg)
                               g_dec_fd, g_dec_bo.ptr);
 
         rockface_control_convert(g_dec_bo.ptr, g_width, g_height,
-                                 RK_FORMAT_YCbCr_420_SP, HAL_TRANSFORM_ROT_90);
+                                 RK_FORMAT_YCbCr_420_SP, g_rotation);
 
         if (g_display_cb)
             g_display_cb(g_dec_bo.ptr, g_dec_fd, RK_FORMAT_YCbCr_420_SP,
-                         g_width, g_height, HAL_TRANSFORM_ROT_90);
+                         g_width, g_height, g_rotation);
 
         if (qbuf(g_fd, &buf))
             break;

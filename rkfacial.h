@@ -33,6 +33,10 @@ void set_cif_param(int width, int height, display_callback cb);
 void set_usb_param(int width, int height, display_callback cb);
 void set_face_param(int width, int height, int cnt);
 
+void set_isp_rotation(int angle);
+void set_cif_rotation(int angle);
+void set_usb_rotation(int angle);
+
 int rkfacial_init(void);
 void rkfacial_exit(void);
 void rkfacial_register(void);

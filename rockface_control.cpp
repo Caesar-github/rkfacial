@@ -281,7 +281,7 @@ static int rockface_control_detect(rockface_image_t *image, rockface_det_t *face
         bottom = face->box.bottom;
         if (rkfacial_paint_box_cb)
             rkfacial_paint_box_cb(left, top, right, bottom);
-        rkisp_control_expo_weights_90(left, top, right, bottom);
+        rkisp_control_expo_weights(left, top, right, bottom);
     } else {
         if (rkfacial_paint_box_cb)
             rkfacial_paint_box_cb(0, 0, 0, 0);

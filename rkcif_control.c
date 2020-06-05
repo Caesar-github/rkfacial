@@ -49,6 +49,16 @@ static bool g_cif_en;
 static int g_cif_width;
 static int g_cif_height;
 static display_callback g_display_cb = NULL;
+static int g_rotation = HAL_TRANSFORM_ROT_270;
+
+void set_cif_rotation(int angle)
+{
+    if (angle == 90)
+        g_rotation = HAL_TRANSFORM_ROT_90;
+    else if (angle == 270)
+        g_rotation = HAL_TRANSFORM_ROT_270;
+}
+
 
 void set_cif_param(int width, int height, display_callback cb)
 {
@@ -67,11 +77,11 @@ static void *process(void *arg)
         memset((char *)buf->buf + ctx->height * ctx->width, 128, ctx->height * ctx->width / 2);
 
         rockface_control_convert_ir(buf->buf, ctx->width, ctx->height,
-                                    RK_FORMAT_YCbCr_420_SP, HAL_TRANSFORM_ROT_270);
+                                    RK_FORMAT_YCbCr_420_SP, g_rotation);
 
         if (g_display_cb)
             g_display_cb(buf->buf, buf->fd, RK_FORMAT_YCbCr_420_SP,
-                         ctx->width, ctx->height, HAL_TRANSFORM_ROT_270);
+                         ctx->width, ctx->height, g_rotation);
 
         rkisp_put_frame(ctx, buf);
     } while (g_run);

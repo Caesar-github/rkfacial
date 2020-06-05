@@ -52,6 +52,15 @@ bool g_isp_en;
 int g_isp_width;
 int g_isp_height;
 static display_callback g_display_cb = NULL;
+static int g_rotation = HAL_TRANSFORM_ROT_90;
+
+void set_isp_rotation(int angle)
+{
+    if (angle == 90)
+        g_rotation = HAL_TRANSFORM_ROT_90;
+    else if (angle == 270)
+        g_rotation = HAL_TRANSFORM_ROT_270;
+}
 
 void set_isp_param(int width, int height, display_callback cb, bool expo)
 {
@@ -89,11 +98,11 @@ static void *process(void *arg)
         buf = rkisp_get_frame(ctx, 0);
 
         rockface_control_convert(buf->buf, ctx->width, ctx->height,
-                                 RK_FORMAT_YCbCr_420_SP, HAL_TRANSFORM_ROT_90);
+                                 RK_FORMAT_YCbCr_420_SP, g_rotation);
 
         if (g_display_cb)
             g_display_cb(buf->buf, buf->fd, RK_FORMAT_YCbCr_420_SP,
-                         ctx->width, ctx->height, HAL_TRANSFORM_ROT_90);
+                         ctx->width, ctx->height, g_rotation);
 
         rkisp_put_frame(ctx, buf);
     } while (g_run);
@@ -162,7 +171,7 @@ void rkisp_control_exit(void)
     rkisp_close_device(ctx);
 }
 
-void rkisp_control_expo_weights_270(int left, int top, int right, int bottom)
+static void rkisp_control_expo_weights_270(int left, int top, int right, int bottom)
 {
     if (!g_isp_en)
         return;
@@ -189,7 +198,7 @@ void rkisp_control_expo_weights_270(int left, int top, int right, int bottom)
     }
 }
 
-void rkisp_control_expo_weights_90(int left, int top, int right, int bottom)
+static void rkisp_control_expo_weights_90(int left, int top, int right, int bottom)
 {
     if (!g_isp_en)
         return;
@@ -214,6 +223,14 @@ void rkisp_control_expo_weights_90(int left, int top, int right, int bottom)
         rkisp_set_expo_weights(ctx, weights, sizeof(weights));
         g_def_expo_weights = false;
     }
+}
+
+void rkisp_control_expo_weights(int left, int top, int right, int bottom)
+{
+    if (g_rotation == HAL_TRANSFORM_ROT_90)
+        rkisp_control_expo_weights_90(left, top, right, bottom);
+    else if (g_rotation == HAL_TRANSFORM_ROT_270)
+        rkisp_control_expo_weights_270(left, top, right, bottom);
 }
 
 void rkisp_control_expo_weights_default(void)

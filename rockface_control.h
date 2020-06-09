@@ -49,7 +49,7 @@ int rockface_control_convert(void *ptr, int width, int height, RgaSURF_FORMAT fm
 void rockface_control_set_delete(void);
 void rockface_control_set_register(void);
 int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation);
-int rockface_control_delete(int id, bool notify);
+int rockface_control_delete(int id, const char *pname, bool notify);
 int rockface_control_add(int id, const char *name, void *feature);
 
 #ifdef __cplusplus

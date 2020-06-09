@@ -774,7 +774,7 @@ static void *rockface_control_thread(void *arg)
         }
         gettimeofday(&t1, NULL);
         if (g_delete && del_timeout && result) {
-            rockface_control_delete(result->id, true);
+            rockface_control_delete(result->id, NULL, true);
             del_timeout = 0;
             g_delete = false;
             play_wav_signal(DELETE_SUCCESS_WAV);
@@ -1006,12 +1006,15 @@ void rockface_control_database(void)
     pthread_mutex_unlock(&g_lib_lock);
 }
 
-int rockface_control_delete(int id, bool notify)
+int rockface_control_delete(int id, const char *pname, bool notify)
 {
     char name[NAME_LEN];
 
-    if (!database_is_id_exist(id, name, NAME_LEN))
+    if (!database_is_id_exist(id, name, NAME_LEN)) {
+        if (pname && strlen(pname))
+            unlink(pname);
         return -1;
+    }
 
     printf("delete %d from %s\n", id, DATABASE_PATH);
     database_delete(id, true);

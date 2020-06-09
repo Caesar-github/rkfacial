@@ -65,6 +65,7 @@
 struct json_data {
     int id;
     char *path;
+    bool add;
 };
 
 static std::list<int> g_fail_id;
@@ -160,14 +161,14 @@ static void *db_monitor_thread(void *arg)
         if (!data)
             continue;
 
-        if (data->path) {
+        if (data->add) {
             if (rockface_control_add(data->id, data->path, NULL))
                 dbserver_face_load_complete(data->id, -1);
             else
                 dbserver_face_load_complete(data->id, 1);
             printf("Update: id = %d, path = %s\n", data->id, data->path);
         } else {
-            rockface_control_delete(data->id, false);
+            rockface_control_delete(data->id, data->path, false);
             printf("Delete: id = %d\n", data->id);
         }
 
@@ -208,6 +209,7 @@ void db_monitor_run(void *json_str)
             if (path) {
                 struct json_data *data = (struct json_data*)calloc(sizeof(struct json_data), 1);
                 if (data) {
+                    data->add = true;
                     data->id = id;
                     data->path = strdup(path);
                     if (data->path) {
@@ -233,6 +235,16 @@ void db_monitor_run(void *json_str)
         struct json_data *data = (struct json_data*)calloc(sizeof(struct json_data), 1);
         if (data) {
             data->id = id;
+            data->add = false;
+            json_object *j_path = json_object_object_get(j_key, "sPicturePath");
+            const char *path = json_object_get_string(j_path);
+            if (path) {
+                data->path = strdup(path);
+                if (!data->path)
+                    printf("strdup %d path fail!\n", id);
+            } else {
+                printf("get %d path fail!\n", id);
+            }
             pthread_mutex_lock(&g_lock);
             g_json.push_back(data);
             pthread_mutex_unlock(&g_lock);

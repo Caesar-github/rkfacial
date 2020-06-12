@@ -72,18 +72,22 @@
 #define SNAP_TIME 3
 
 #define DET_BUFFER_NUM 2
+#define DET_WIDTH 360
+#define DET_HEIGHT 640
 
-struct det_buf {
+struct face_buf {
     rockface_image_t img;
     rockface_det_t face;
     bo_t bo;
     int fd;
+    int id;
 };
 
-static struct det_buf g_det_buf[DET_BUFFER_NUM];
+static struct face_buf g_feature;
+static struct face_buf g_detect[DET_BUFFER_NUM];
 static pthread_mutex_t g_det_lock = PTHREAD_MUTEX_INITIALIZER;
-static std::list<struct det_buf*> g_det_free;
-static std::list<struct det_buf*> g_det_ready;
+static std::list<struct face_buf*> g_det_free;
+static std::list<struct face_buf*> g_det_ready;
 
 static void *g_face_data = NULL;
 static int g_face_index = 0;
@@ -97,25 +101,29 @@ static bool g_run;
 static char last_name[NAME_LEN];
 static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_cond = PTHREAD_COND_INITIALIZER;
-static bool g_flag;
+static bool g_feature_flag;
 static pthread_t g_detect_tid;
 static pthread_mutex_t g_detect_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_detect_cond = PTHREAD_COND_INITIALIZER;
 static bool g_detect_flag;
-static rockface_image_t g_rgbx_img;
-static rockface_det_t g_rgbx_face;
-static bo_t g_rgbx_bo;
-static int g_rgbx_fd = -1;
 static int g_rgb_track = -1;
 static pthread_mutex_t g_rgb_track_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-static pthread_mutex_t g_ir_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t g_ir_cond = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t g_ir_img_mutex = PTHREAD_MUTEX_INITIALIZER;
 static rockface_image_t g_ir_img;
 static bo_t g_ir_bo;
 static int g_ir_fd = -1;
-static bool g_ir_flag;
+
+static bo_t g_ir_det_bo;
+static int g_ir_det_fd = -1;
+
+enum ir_state {
+    IR_STATE_CANCELED,
+    IR_STATE_PREPARED,
+    IR_STATE_COMPLETE,
+    IR_STATE_USING,
+};
+
+enum ir_state g_ir_state;
 
 static bool g_register = false;
 static int g_register_cnt = 0;
@@ -128,13 +136,16 @@ static pthread_mutex_t g_lib_lock = PTHREAD_MUTEX_INITIALIZER;
 bool g_face_en;
 int g_face_width;
 int g_face_height;
+static int g_ratio;
 
 void set_face_param(int width, int height, int cnt)
 {
+    int tmp = width < height ? width : height;
     g_face_en = true;
     g_face_width = width;
     g_face_height = height;
     g_face_cnt = cnt;
+    g_ratio = tmp / DET_WIDTH;
 }
 
 static void check_pre_path(const char *pre)
@@ -243,7 +254,7 @@ static int _rockface_control_detect(rockface_image_t *image, rockface_det_t *out
 
     if (track) {
         pthread_mutex_lock(&g_rgb_track_mutex);
-        if (g_delete || g_register)
+        if (g_delete || g_register || !strlen(last_name))
             *track = -1;
         else if (*track == face->id)
             r = -2;
@@ -275,10 +286,10 @@ static int rockface_control_detect(rockface_image_t *image, rockface_det_t *face
     ret = _rockface_control_detect(image, face, &g_rgb_track);
     if (face->score > FACE_SCORE_RGB) {
         int left, top, right, bottom;
-        left = face->box.left;
-        top = face->box.top;
-        right = face->box.right;
-        bottom = face->box.bottom;
+        left = face->box.left * g_ratio;
+        top = face->box.top * g_ratio;
+        right = face->box.right * g_ratio;
+        bottom = face->box.bottom * g_ratio;
         if (rkfacial_paint_box_cb)
             rkfacial_paint_box_cb(left, top, right, bottom);
         rkisp_control_expo_weights(left, top, right, bottom);
@@ -386,7 +397,7 @@ static bool rockface_control_search(rockface_image_t *image, void *data, int *in
             snprintf(name, sizeof(name), "%s/%s_%d.jpg", g_white_list, USER_NAME, id);
 #ifdef USE_WEB_SERVER
             strncpy(g_snap.name, name, sizeof(g_snap.name));
-            if (!snapshot_run(&g_snap, image, NULL, RK_FORMAT_YCbCr_420_SP, 0, 0))
+            if (!snapshot_run(&g_snap, image, NULL, RK_FORMAT_RGB_888, 0, 0))
                 printf("save %s success\n", name);
 #endif
 
@@ -399,7 +410,7 @@ static bool rockface_control_search(rockface_image_t *image, void *data, int *in
         }
 #ifdef USE_WEB_SERVER
         memset(g_snap.name, 0, sizeof(g_snap.name));
-        if (!snapshot_run(&g_snap, image, face, RK_FORMAT_YCbCr_420_SP, SNAP_TIME, 'S'))
+        if (!snapshot_run(&g_snap, image, face, RK_FORMAT_RGB_888, SNAP_TIME, 'S'))
             db_monitor_snapshot_record_set(g_snap.name);
 #endif
     }
@@ -438,26 +449,41 @@ static void rockface_control_detect_signal(void)
     pthread_mutex_unlock(&g_detect_mutex);
 }
 
-static void rockface_control_wait(void)
+static int rockface_control_wait(void)
 {
+    int ret;
     pthread_mutex_lock(&g_mutex);
-    if (g_flag)
-        pthread_cond_wait(&g_cond, &g_mutex);
+    if (g_feature_flag) {
+#define TIMEOUT_US 100000
+#define ONE_MIN_US 1000000
+        struct timeval now;
+        struct timespec out;
+        gettimeofday(&now, NULL);
+        if (now.tv_usec + TIMEOUT_US >= ONE_MIN_US) {
+            out.tv_sec = now.tv_sec + 1;
+            out.tv_nsec = (now.tv_usec + TIMEOUT_US - ONE_MIN_US) * 1000;
+        } else {
+            out.tv_sec = now.tv_sec;
+            out.tv_nsec = (now.tv_usec + TIMEOUT_US) * 1000;
+        }
+        ret = pthread_cond_timedwait(&g_cond, &g_mutex, &out);
+    }
     pthread_mutex_unlock(&g_mutex);
+    return ret;
 }
 
 static void rockface_control_signal(void)
 {
     pthread_mutex_lock(&g_mutex);
-    g_flag = false;
+    g_feature_flag = false;
     pthread_cond_signal(&g_cond);
     pthread_mutex_unlock(&g_mutex);
 }
 
-int rockface_control_convert(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation)
+int rockface_control_convert_detect(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation, int id)
 {
     rga_info_t src, dst;
-    struct det_buf *buf;
+    struct face_buf *buf;
 
     if (!g_run)
         return -1;
@@ -472,24 +498,6 @@ int rockface_control_convert(void *ptr, int width, int height, RgaSURF_FORMAT fm
         pthread_mutex_unlock(&g_det_lock);
     }
 
-    memset(&buf->img, 0, sizeof(rockface_image_t));
-    switch (rotation) {
-    case 0:
-        buf->img.width = width;
-        buf->img.height = height;
-        break;
-    case HAL_TRANSFORM_ROT_90:
-    case HAL_TRANSFORM_ROT_270:
-        buf->img.width = height;
-        buf->img.height = width;
-        break;
-    default:
-        printf("%s: unsupport rotation!\n", __func__);
-        goto exit;
-    }
-    buf->img.pixel_format = ROCKFACE_PIXEL_FORMAT_YUV420SP_NV12;
-    buf->img.data = (uint8_t *)buf->bo.ptr;
-
     memset(&src, 0, sizeof(rga_info_t));
     src.fd = -1;
     src.virAddr = ptr;
@@ -498,14 +506,20 @@ int rockface_control_convert(void *ptr, int width, int height, RgaSURF_FORMAT fm
     rga_set_rect(&src.rect, 0, 0, width, height, width, height, fmt);
     memset(&dst, 0, sizeof(rga_info_t));
     dst.fd = -1;
-    dst.virAddr = buf->img.data;
+    dst.virAddr = buf->bo.ptr;
     dst.mmuFlag = 1;
-    rga_set_rect(&dst.rect, 0, 0, buf->img.width, buf->img.height,
-                 buf->img.width, buf->img.height, RK_FORMAT_YCbCr_420_SP);
+    rga_set_rect(&dst.rect, 0, 0, DET_WIDTH, DET_HEIGHT,
+                 DET_WIDTH, DET_HEIGHT, RK_FORMAT_RGB_888);
     if (c_RkRgaBlit(&src, &dst, NULL)) {
         printf("%s: rga fail\n", __func__);
         goto exit;
     }
+    memset(&buf->img, 0, sizeof(rockface_image_t));
+    buf->img.width = DET_WIDTH;
+    buf->img.height = DET_HEIGHT;
+    buf->img.pixel_format = ROCKFACE_PIXEL_FORMAT_RGB888;
+    buf->img.data = (uint8_t *)buf->bo.ptr;
+    buf->id = id;
 
     pthread_mutex_lock(&g_det_lock);
     g_det_ready.push_back(buf);
@@ -521,69 +535,96 @@ exit:
     return -1;
 }
 
+int rockface_control_convert_feature(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation, int id)
+{
+    rga_info_t src, dst;
+    if (!g_feature_flag || g_feature.id)
+        return -1;
+    memset(&src, 0, sizeof(rga_info_t));
+    src.fd = -1;
+    src.virAddr = ptr;
+    src.mmuFlag = 1;
+    src.rotation = rotation;
+    rga_set_rect(&src.rect, 0, 0, width, height, width, height, fmt);
+    memset(&dst, 0, sizeof(rga_info_t));
+    dst.fd = -1;
+    dst.virAddr = g_feature.bo.ptr;
+    dst.mmuFlag = 1;
+    rga_set_rect(&dst.rect, 0, 0, height, width, height, width, RK_FORMAT_RGB_888);
+    if (c_RkRgaBlit(&src, &dst, NULL)) {
+        printf("%s: rga fail\n", __func__);
+        return -1;
+    }
+    memset(&g_feature.img, 0, sizeof(g_feature.img));
+    g_feature.img.width = height;
+    g_feature.img.height = width;
+    g_feature.img.pixel_format = ROCKFACE_PIXEL_FORMAT_RGB888;
+    g_feature.img.data = (uint8_t *)g_feature.bo.ptr;
+    g_feature.id = id;
+
+    return 0;
+}
+
 static bool rockface_control_liveness_ir(void)
 {
-    bool real = false;
     rockface_ret_t ret;
     rockface_image_t image;
     rockface_det_array_t face_array;
     rockface_liveness_t result;
 
-    if (pthread_mutex_trylock(&g_ir_img_mutex))
-        return real;
-
-    ret = rockface_detect(face_handle, &g_ir_img, &face_array);
-    if (ret != ROCKFACE_RET_SUCCESS) {
-        pthread_mutex_unlock(&g_ir_img_mutex);
-        return real;
+    int src_w = g_ir_img.width, src_h = g_ir_img.height;
+    int dst_w = DET_WIDTH, dst_h = DET_HEIGHT;
+    rga_info_t src, dst;
+    memset(&src, 0, sizeof(rga_info_t));
+    src.fd = -1;
+    src.virAddr = g_ir_bo.ptr;
+    src.mmuFlag = 1;
+    rga_set_rect(&src.rect, 0, 0, src_w, src_h, src_w, src_h, RK_FORMAT_YCbCr_420_SP);
+    memset(&dst, 0, sizeof(rga_info_t));
+    dst.fd = -1;
+    dst.virAddr = g_ir_det_bo.ptr;
+    dst.mmuFlag = 1;
+    rga_set_rect(&dst.rect, 0, 0, dst_w, dst_h, dst_w, dst_h, RK_FORMAT_RGB_888);
+    if (c_RkRgaBlit(&src, &dst, NULL)) {
+        printf("%s: rga fail\n", __func__);
+        return false;
     }
+
+    rockface_image_t ir_det_img;
+    memset(&ir_det_img, 0, sizeof(rockface_image_t));
+    ir_det_img.width = DET_WIDTH;
+    ir_det_img.height = DET_HEIGHT;
+    ir_det_img.pixel_format = ROCKFACE_PIXEL_FORMAT_RGB888;
+    ir_det_img.data = (uint8_t *)g_ir_det_bo.ptr;
+    ret = rockface_detect(face_handle, &ir_det_img, &face_array);
+    if (ret != ROCKFACE_RET_SUCCESS)
+        return false;
 
     rockface_det_t* face = get_max_face(&face_array);
     if (face == NULL || face->score < FACE_SCORE_IR ||
-        face->box.right - face->box.left < MIN_FACE_WIDTH(g_ir_img.width) ||
+        face->box.right - face->box.left < MIN_FACE_WIDTH(ir_det_img.width) ||
         face->box.left < 0 || face->box.top < 0 ||
-        face->box.right > g_ir_img.width || face->box.bottom > g_ir_img.height)
-        goto exit0;
+        face->box.right > ir_det_img.width || face->box.bottom > ir_det_img.height)
+        return false;
 
+    face->box.left *= g_ratio;
+    face->box.top *= g_ratio;
+    face->box.right *= g_ratio;
+    face->box.bottom *= g_ratio;
     ret = rockface_liveness_detect(face_handle, &g_ir_img, &face->box, &result);
     if (ret != ROCKFACE_RET_SUCCESS)
-        goto exit0;
+        return false;
 
     if (result.real_score < FACE_REAL_SCORE)
-        goto exit0;
+        return false;
 
-    real = true;
-
-exit0:
-    pthread_mutex_unlock(&g_ir_img_mutex);
-    return real;
+    return true;
 }
 
-static bool rockface_control_wait_ir(void)
+void rockface_control_set_ir_prepared(void)
 {
-    bool ret = false;
-    struct timeval now;
-    struct timespec timeout;
-    static int cnt = 0;
-
-    pthread_mutex_lock(&g_ir_mutex);
-    g_ir_flag = true;
-    gettimeofday(&now, NULL);
-    timeout.tv_sec = now.tv_sec + 1;
-    timeout.tv_nsec = now.tv_usec * 1000;
-    if (g_ir_flag)
-        if (!pthread_cond_timedwait(&g_ir_cond, &g_ir_mutex, &timeout))
-            ret = true;
-    pthread_mutex_unlock(&g_ir_mutex);
-    return ret;
-}
-
-static void rockface_control_signal_ir(void)
-{
-    pthread_mutex_lock(&g_ir_mutex);
-    g_ir_flag = false;
-    pthread_cond_signal(&g_ir_cond);
-    pthread_mutex_unlock(&g_ir_mutex);
+    if (g_ir_state == IR_STATE_CANCELED)
+        g_ir_state = IR_STATE_PREPARED;
 }
 
 int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation)
@@ -594,10 +635,7 @@ int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT
     if (!g_run)
         return ret;
 
-    if (!g_ir_flag)
-        return ret;
-
-    if (pthread_mutex_trylock(&g_ir_img_mutex))
+    if (g_ir_state != IR_STATE_PREPARED)
         return ret;
 
     memset(&g_ir_img, 0, sizeof(rockface_image_t));
@@ -635,12 +673,10 @@ int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT
         goto exit;
     }
 
+    g_ir_state = IR_STATE_COMPLETE;
     ret = 0;
 
 exit:
-    pthread_mutex_unlock(&g_ir_img_mutex);
-    if (ret == 0)
-        rockface_control_signal_ir();
     return ret;
 }
 
@@ -649,7 +685,7 @@ static void *rockface_control_detect_thread(void *arg)
     rockface_ret_t ret;
     rga_info_t src, dst;
     int det;
-    struct det_buf *buf = NULL;
+    struct face_buf *buf = NULL;
 
     while (g_run) {
         if (buf) {
@@ -680,39 +716,27 @@ static void *rockface_control_detect_thread(void *arg)
             continue;
         }
 
-        if (!g_flag)
+        if (!g_feature_flag)
             continue;
 
-        g_rgbx_img.width = buf->img.width;
-        g_rgbx_img.height = buf->img.height;
-        g_rgbx_img.pixel_format = ROCKFACE_PIXEL_FORMAT_YUV420SP_NV12;
-        g_rgbx_img.data = (uint8_t *)g_rgbx_bo.ptr;
-
-        memset(&src, 0, sizeof(rga_info_t));
-        src.fd = -1;
-        src.virAddr = buf->bo.ptr;
-        src.mmuFlag = 1;
-        rga_set_rect(&src.rect, 0, 0, buf->img.width, buf->img.height,
-                buf->img.width, buf->img.height, RK_FORMAT_YCbCr_420_SP);
-        memset(&dst, 0, sizeof(rga_info_t));
-        dst.fd = -1;
-        dst.virAddr = g_rgbx_bo.ptr;
-        dst.mmuFlag = 1;
-        rga_set_rect(&dst.rect, 0, 0, g_rgbx_img.width, g_rgbx_img.height,
-                g_rgbx_img.width, g_rgbx_img.height, RK_FORMAT_YCbCr_420_SP);
-        if (c_RkRgaBlit(&src, &dst, NULL)) {
-            printf("%s: rga fail\n", __func__);
-            continue;
+        if (g_feature.id == buf->id) {
+            memcpy(&g_feature.face, &buf->face, sizeof(rockface_det_t));
+            g_feature.face.box.left = buf->face.box.left * g_ratio;
+            g_feature.face.box.top = buf->face.box.top * g_ratio;
+            g_feature.face.box.right = buf->face.box.right * g_ratio;
+            g_feature.face.box.bottom = buf->face.box.bottom * g_ratio;
+            rockface_control_signal();
+            g_feature.id = 0;
+        } else if (g_feature.id < buf->id) {
+            g_feature.id = 0;
+            g_ir_state = IR_STATE_CANCELED;
         }
-
-        memcpy(&g_rgbx_face, &buf->face, sizeof(rockface_det_t));
-        rockface_control_signal();
     }
 
     pthread_exit(NULL);
 }
 
-static void *rockface_control_thread(void *arg)
+static void *rockface_control_feature_thread(void *arg)
 {
     int index;
     struct face_data result_data;
@@ -724,13 +748,15 @@ static void *rockface_control_thread(void *arg)
     bool real = false;
     bool ret;
     char result_name[NAME_LEN];
+    int timeout;
 
     while (g_run) {
         pthread_mutex_lock(&g_mutex);
-        g_flag = true;
+        g_feature_flag = true;
         pthread_mutex_unlock(&g_mutex);
         real = false;
-        rockface_control_wait();
+        g_ir_state = IR_STATE_CANCELED;
+        timeout = rockface_control_wait();
         if (!g_run)
             break;
         if (g_delete) {
@@ -763,9 +789,11 @@ static void *rockface_control_thread(void *arg)
         } else {
             reg_timeout = 0;
         }
-        memcpy(&face, &g_rgbx_face, sizeof(face));
+        if (timeout == ETIMEDOUT)
+            continue;
+        memcpy(&face, &g_feature.face, sizeof(face));
         gettimeofday(&t0, NULL);
-        ret = (struct face_data*)rockface_control_search(&g_rgbx_img, g_face_data, &g_face_index,
+        ret = (struct face_data*)rockface_control_search(&g_feature.img, g_face_data, &g_face_index,
                         g_face_cnt, sizeof(struct face_data), 0, &face, reg_timeout, &result_data);
         if (ret) {
             result = &result_data;
@@ -783,9 +811,11 @@ static void *rockface_control_thread(void *arg)
         } else if (result && face.score > FACE_SCORE_RGB) {
             if (database_is_id_exist(result->id, result_name, NAME_LEN)) {
                 if (rkcif_control_run()) {
-                    if (rockface_control_wait_ir())
+                    if (g_ir_state == IR_STATE_COMPLETE) {
+                        g_ir_state = IR_STATE_USING;
                         if (rockface_control_liveness_ir())
                             real = true;
+                    }
                 }
                 if (rkfacial_paint_info_cb) {
                     struct user_info info;
@@ -813,7 +843,7 @@ static void *rockface_control_thread(void *arg)
                     snprintf(similarity, sizeof(similarity), "%f", face.score);
 #ifdef USE_WEB_SERVER
                     memset(g_snap.name, 0, sizeof(g_snap.name));
-                    if (!snapshot_run(&g_snap, &g_rgbx_img, &face, RK_FORMAT_YCbCr_420_SP, 0, mark))
+                    if (!snapshot_run(&g_snap, &g_feature.img, &face, RK_FORMAT_RGB_888, 0, mark))
                         db_monitor_control_record_set(result->id, g_snap.name,
                                 status, similarity);
 #endif
@@ -876,7 +906,7 @@ int rockface_control_init(void)
         return -1;
     }
 
-    ret = rockface_init_detector(face_handle);
+    ret = rockface_init_detector2(face_handle, 1);
     if (ret != ROCKFACE_RET_SUCCESS) {
         printf("%s: init detector error %d!\n", __func__, ret);
         return -1;
@@ -931,17 +961,19 @@ int rockface_control_init(void)
         return -1;
 
     for (int i = 0; i < DET_BUFFER_NUM; i++) {
-        if (rga_control_buffer_init(&g_det_buf[i].bo, &g_det_buf[i].fd, width, height, 12))
+        if (rga_control_buffer_init(&g_detect[i].bo, &g_detect[i].fd, DET_WIDTH, DET_HEIGHT, 24))
             return -1;
         pthread_mutex_lock(&g_det_lock);
-        g_det_free.push_back(&g_det_buf[i]);
+        g_det_free.push_back(&g_detect[i]);
         pthread_mutex_unlock(&g_det_lock);
     }
 
-    if (rga_control_buffer_init(&g_rgbx_bo, &g_rgbx_fd, width, height, 12))
+    if (rga_control_buffer_init(&g_feature.bo, &g_feature.fd, width, height, 24))
         return -1;
 
     if (rga_control_buffer_init(&g_ir_bo, &g_ir_fd, width, height, 12))
+        return -1;
+    if (rga_control_buffer_init(&g_ir_det_bo, &g_ir_det_fd, DET_WIDTH, DET_HEIGHT, 24))
         return -1;
 
     g_run = true;
@@ -950,7 +982,7 @@ int rockface_control_init(void)
         g_run = false;
         return -1;
     }
-    if (pthread_create(&g_tid, NULL, rockface_control_thread, NULL)) {
+    if (pthread_create(&g_tid, NULL, rockface_control_feature_thread, NULL)) {
         printf("%s: pthread_create error!\n", __func__);
         g_run = false;
         return -1;
@@ -987,10 +1019,11 @@ void rockface_control_exit(void)
     }
 
     for (int i = 0; i < DET_BUFFER_NUM; i++) {
-        rga_control_buffer_deinit(&g_det_buf[i].bo, g_det_buf[i].fd);
+        rga_control_buffer_deinit(&g_detect[i].bo, g_detect[i].fd);
     }
-    rga_control_buffer_deinit(&g_rgbx_bo, g_rgbx_fd);
+    rga_control_buffer_deinit(&g_feature.bo, g_feature.fd);
     rga_control_buffer_deinit(&g_ir_bo, g_ir_fd);
+    rga_control_buffer_deinit(&g_ir_det_bo, g_ir_det_fd);
     snapshot_exit(&g_snap);
 }
 

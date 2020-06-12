@@ -45,12 +45,14 @@ int rockface_control_init(void);
 void rockface_control_init_thread(void);
 void rockface_control_exit(void);
 int rockface_control_get_path_feature(const char *path, void *feature);
-int rockface_control_convert(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation);
+int rockface_control_convert_detect(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation, int id);
+int rockface_control_convert_feature(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation, int id);
 void rockface_control_set_delete(void);
 void rockface_control_set_register(void);
 int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation);
 int rockface_control_delete(int id, const char *pname, bool notify);
 int rockface_control_add(int id, const char *name, void *feature);
+void rockface_control_set_ir_prepared(void);
 
 #ifdef __cplusplus
 }

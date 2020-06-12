@@ -91,14 +91,17 @@ static inline void rkisp_inc_fps(void)
 
 static void *process(void *arg)
 {
+    int id = 0;
     do {
+        id++;
 #if 0
         rkisp_inc_fps();
 #endif
         buf = rkisp_get_frame(ctx, 0);
 
-        rockface_control_convert(buf->buf, ctx->width, ctx->height,
-                                 RK_FORMAT_YCbCr_420_SP, g_rotation);
+        if (!rockface_control_convert_detect(buf->buf, ctx->width, ctx->height, RK_FORMAT_YCbCr_420_SP, g_rotation, id))
+            if (!rockface_control_convert_feature(buf->buf, ctx->width, ctx->height, RK_FORMAT_YCbCr_420_SP, g_rotation, id))
+                rockface_control_set_ir_prepared();
 
         if (g_display_cb)
             g_display_cb(buf->buf, buf->fd, RK_FORMAT_YCbCr_420_SP,

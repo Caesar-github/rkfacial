@@ -269,19 +269,21 @@ static void *process(void *arg)
 {
     struct v4l2_buffer buf;
     rga_info_t src, dst;
+    int id = 0;
 
     memset(&buf, 0, sizeof(buf));
     buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     buf.memory = V4L2_MEMORY_MMAP;
     while (g_run) {
+        id++;
         if (dqbuf(g_fd, &buf))
             break;
 
         vpu_decode_jpeg_doing(&g_decode, g_map_buf[buf.index].start, buf.bytesused,
                               g_dec_fd, g_dec_bo.ptr);
 
-        rockface_control_convert(g_dec_bo.ptr, g_width, g_height,
-                                 RK_FORMAT_YCbCr_420_SP, g_rotation);
+        if (!rockface_control_convert_detect(g_dec_bo.ptr, g_width, g_height, RK_FORMAT_YCbCr_420_SP, g_rotation, id))
+            rockface_control_convert_feature(g_dec_bo.ptr, g_width, g_height, RK_FORMAT_YCbCr_420_SP, g_rotation, id);
 
         if (g_display_cb)
             g_display_cb(g_dec_bo.ptr, g_dec_fd, RK_FORMAT_YCbCr_420_SP,

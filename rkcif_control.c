@@ -49,6 +49,7 @@ static bool g_cif_en;
 static int g_cif_width;
 static int g_cif_height;
 static display_callback g_display_cb = NULL;
+static pthread_mutex_t g_display_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_rotation = HAL_TRANSFORM_ROT_270;
 
 void set_cif_rotation(int angle)
@@ -59,13 +60,19 @@ void set_cif_rotation(int angle)
         g_rotation = HAL_TRANSFORM_ROT_270;
 }
 
+void set_cif_display(display_callback cb)
+{
+    pthread_mutex_lock(&g_display_lock);
+    g_display_cb = cb;
+    pthread_mutex_unlock(&g_display_lock);
+}
 
 void set_cif_param(int width, int height, display_callback cb)
 {
     g_cif_en = true;
     g_cif_width = width;
     g_cif_height = height;
-    g_display_cb = cb;
+    set_cif_display(cb);
 }
 
 static void *process(void *arg)
@@ -79,9 +86,11 @@ static void *process(void *arg)
         rockface_control_convert_ir(buf->buf, ctx->width, ctx->height,
                                     RK_FORMAT_YCbCr_420_SP, g_rotation);
 
+        pthread_mutex_lock(&g_display_lock);
         if (g_display_cb)
             g_display_cb(buf->buf, buf->fd, RK_FORMAT_YCbCr_420_SP,
-                         ctx->width, ctx->height, g_rotation);
+                    ctx->width, ctx->height, g_rotation);
+        pthread_mutex_unlock(&g_display_lock);
 
         rkisp_put_frame(ctx, buf);
     } while (g_run);

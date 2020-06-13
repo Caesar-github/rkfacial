@@ -75,6 +75,7 @@ static bool g_usb_en;
 static int g_usb_width;
 static int g_usb_height;
 static display_callback g_display_cb = NULL;
+static pthread_mutex_t g_display_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_rotation = HAL_TRANSFORM_ROT_90;
 
 void set_usb_rotation(int angle)
@@ -85,12 +86,19 @@ void set_usb_rotation(int angle)
         g_rotation = HAL_TRANSFORM_ROT_270;
 }
 
+void set_usb_display(display_callback cb)
+{
+    pthread_mutex_lock(&g_display_lock);
+    g_display_cb = cb;
+    pthread_mutex_unlock(&g_display_lock);
+}
+
 void set_usb_param(int width, int height, display_callback cb)
 {
     g_usb_en = true;
     g_usb_width = width;
     g_usb_height = height;
-    g_display_cb = cb;
+    set_usb_display(cb);
 }
 
 static int qbuf(int fd, struct v4l2_buffer *buf)
@@ -285,9 +293,11 @@ static void *process(void *arg)
         if (!rockface_control_convert_detect(g_dec_bo.ptr, g_width, g_height, RK_FORMAT_YCbCr_420_SP, g_rotation, id))
             rockface_control_convert_feature(g_dec_bo.ptr, g_width, g_height, RK_FORMAT_YCbCr_420_SP, g_rotation, id);
 
+        pthread_mutex_lock(&g_display_lock);
         if (g_display_cb)
             g_display_cb(g_dec_bo.ptr, g_dec_fd, RK_FORMAT_YCbCr_420_SP,
-                         g_width, g_height, g_rotation);
+                    g_width, g_height, g_rotation);
+        pthread_mutex_unlock(&g_display_lock);
 
         if (qbuf(g_fd, &buf))
             break;

@@ -52,6 +52,7 @@ bool g_isp_en;
 int g_isp_width;
 int g_isp_height;
 static display_callback g_display_cb = NULL;
+static pthread_mutex_t g_display_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_rotation = HAL_TRANSFORM_ROT_90;
 
 void set_isp_rotation(int angle)
@@ -62,12 +63,19 @@ void set_isp_rotation(int angle)
         g_rotation = HAL_TRANSFORM_ROT_270;
 }
 
+void set_isp_display(display_callback cb)
+{
+    pthread_mutex_lock(&g_display_lock);
+    g_display_cb = cb;
+    pthread_mutex_unlock(&g_display_lock);
+}
+
 void set_isp_param(int width, int height, display_callback cb, bool expo)
 {
     g_isp_en = true;
     g_isp_width = width;
     g_isp_height = height;
-    g_display_cb = cb;
+    set_isp_display(cb);
     g_expo_weights_en = expo;
 }
 
@@ -102,9 +110,11 @@ static void *process(void *arg)
         if (!rockface_control_convert_detect(buf->buf, ctx->width, ctx->height, RK_FORMAT_YCbCr_420_SP, g_rotation, id))
             rockface_control_convert_feature(buf->buf, ctx->width, ctx->height, RK_FORMAT_YCbCr_420_SP, g_rotation, id);
 
+        pthread_mutex_lock(&g_display_lock);
         if (g_display_cb)
             g_display_cb(buf->buf, buf->fd, RK_FORMAT_YCbCr_420_SP,
-                         ctx->width, ctx->height, g_rotation);
+                    ctx->width, ctx->height, g_rotation);
+        pthread_mutex_unlock(&g_display_lock);
 
         rkisp_put_frame(ctx, buf);
     } while (g_run);

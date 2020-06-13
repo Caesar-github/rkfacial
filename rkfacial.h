@@ -68,6 +68,9 @@ void set_isp_param(int width, int height, display_callback cb, bool expo);
 void set_cif_param(int width, int height, display_callback cb);
 void set_usb_param(int width, int height, display_callback cb);
 void set_face_param(int width, int height, int cnt);
+void set_isp_display(display_callback cb);
+void set_cif_display(display_callback cb);
+void set_usb_display(display_callback cb);
 
 void set_isp_rotation(int angle);
 void set_cif_rotation(int angle);

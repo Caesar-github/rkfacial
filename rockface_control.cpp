@@ -59,6 +59,12 @@
 #define FACE_SCORE_RGB 0.55
 #define FACE_SCORE_IR 0.7
 #define FACE_SCORE_LANDMARK_RUNNING 0.9
+
+/*
+ * suggest range 0.7 ~ 1.3, lower score
+ * means need higer similarity to recognize
+ */
+#define FACE_SIMILARITY_SCORE 1.0
 #define FACE_SCORE_LANDMARK_IMAGE 0.5
 #define FACE_SCORE_REGISTER 0.99
 #define FACE_REGISTER_CNT 5
@@ -375,7 +381,7 @@ static bool rockface_control_search(rockface_image_t *image, void *data, int *in
     if (rockface_control_get_feature(image, &feature, face, FACE_SCORE_LANDMARK_RUNNING) == 0) {
         //printf("g_total_cnt = %d\n", ++g_total_cnt);
         pthread_mutex_lock(&g_lib_lock);
-        ret = rockface_feature_search(face_handle, &feature, 0.7, &result);
+        ret = rockface_feature_search(face_handle, &feature, FACE_SIMILARITY_SCORE, &result);
         if (ret == ROCKFACE_RET_SUCCESS) {
             memcpy(face_data, result.feature, sizeof(struct face_data));
             pthread_mutex_unlock(&g_lib_lock);

@@ -53,6 +53,7 @@
 #include <IPCProtocol.h>
 #include <dbserver.h>
 #include <storage_manager.h>
+#include <dbus_signal.h>
 
 #include "rockface_control.h"
 

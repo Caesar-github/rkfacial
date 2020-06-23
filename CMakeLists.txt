@@ -17,11 +17,12 @@ set(SRC
     vpu_encode.c
     snapshot.c
     rkfacial.c
+    turbojpeg_decode.c
 )
 
 include_directories(${DRM_HEADER_DIR})
 
-set(LIB rkisp rkisp_api rockface rknn_api drm rga pthread sqlite3 asound rockchip_mpp)
+set(LIB rkisp rkisp_api rockface rknn_api drm rga pthread sqlite3 asound rockchip_mpp turbojpeg)
 
 if(DEFINED USE_WEB_SERVER)
 include(FindPkgConfig)
@@ -43,6 +44,6 @@ add_library(rkfacial SHARED ${SRC})
 target_link_libraries(rkfacial ${LIB})
 
 install(TARGETS rkfacial DESTINATION lib)
-install(FILES rkfacial.h rga_control.h DESTINATION include/rkfacial)
+install(FILES rkfacial.h rga_control.h turbojpeg_decode.h DESTINATION include/rkfacial)
 
 install(DIRECTORY wav/cn/ DESTINATION ../etc)

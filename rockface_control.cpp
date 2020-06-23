@@ -56,19 +56,19 @@
 
 #define DEFAULT_FACE_NUMBER 1000
 #define DEFAULT_FACE_PATH "/userdata"
-#define FACE_SCORE_RGB 0.55
-#define FACE_SCORE_IR 0.7
-#define FACE_SCORE_LANDMARK_RUNNING 0.9
+#define FACE_SCORE_RGB 0.55 /* range 0 - 1.0, higher score means higher expectation */
+#define FACE_SCORE_IR 0.7 /* range 0 - 1.0, higher score means higher expectation */
+#define FACE_SCORE_LANDMARK_RUNNING 0.9 /* range 0 - 1.0, higher score means higher expectation */
 
 /*
  * suggest range 0.7 ~ 1.3, lower score
  * means need higer similarity to recognize
  */
 #define FACE_SIMILARITY_SCORE 1.0
-#define FACE_SCORE_LANDMARK_IMAGE 0.5
-#define FACE_SCORE_REGISTER 0.99
+#define FACE_SCORE_LANDMARK_IMAGE 0.5 /* range 0 - 1.0, higher score means higher expectation */
+#define FACE_SCORE_REGISTER 0.99 /* range 0 - 1.0, higher score means higher expectation */
 #define FACE_REGISTER_CNT 5
-#define FACE_REAL_SCORE 0.7
+#define FACE_REAL_SCORE 0.7 /* range 0 - 1.0, higher score means higher expectation */
 #define LICENCE_PATH PRE_PATH "/key.lic"
 #define BAK_LICENCE_PATH BAK_PATH "/key.lic"
 #define FACE_DATA_PATH "/usr/lib"

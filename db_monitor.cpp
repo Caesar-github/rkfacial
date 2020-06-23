@@ -163,7 +163,7 @@ static void *db_monitor_thread(void *arg)
             continue;
 
         if (data->add) {
-            if (rockface_control_add(data->id, data->path, NULL))
+            if (rockface_control_add_web(data->id, data->path))
                 dbserver_face_load_complete(data->id, -1);
             else
                 dbserver_face_load_complete(data->id, 1);

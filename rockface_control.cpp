@@ -407,7 +407,7 @@ static bool rockface_control_search(rockface_image_t *image, void *data, int *in
                 printf("save %s success\n", name);
 #endif
 
-            rockface_control_add(id, name, &feature);
+            rockface_control_add_ui(id, name, &feature);
 
             g_register = false;
             g_register_cnt = 0;
@@ -1067,22 +1067,59 @@ int rockface_control_delete(int id, const char *pname, bool notify)
     return 0;
 }
 
-int rockface_control_add(int id, const char *name, void *feature)
+int rockface_control_add_ui(int id, const char *name, void *feature)
 {
     printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
-    if (feature) {
-        char user[] = USER_NAME;
-        char type[] = "whiteList";
-        database_insert(feature, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
-        db_monitor_face_list_add(id, (char*)name, user, type);
+    char user[] = USER_NAME;
+    char type[] = "whiteList";
+    database_insert(feature, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
+    db_monitor_face_list_add(id, (char*)name, user, type);
+
+    rockface_control_database();
+
+    return 0;
+}
+
+int rockface_control_add_web(int id, const char *name)
+{
+    printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
+    rockface_feature_t f;
+    if (!rockface_control_get_path_feature(name, &f)) {
+        database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
     } else {
-        rockface_feature_t f;
-        if (!rockface_control_get_path_feature(name, &f)) {
-            database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
-        } else {
-            printf("%s %s fail!\n", __func__, name);
-            return -1;
-        }
+        printf("%s %s fail!\n", __func__, name);
+        return -1;
+    }
+
+    rockface_control_database();
+
+    return 0;
+}
+
+int rockface_control_add_local(const char *name)
+{
+    int id = database_get_user_name_id();
+    if (id < 0) {
+        printf("%s: get id fail!\n", __func__);
+        return -1;
+    }
+    printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
+    rockface_feature_t f;
+    if (!rockface_control_get_path_feature(name, &f)) {
+        char type[] = "whiteList";
+        char tmp[NAME_LEN];
+        const char *begin = strrchr(name, '/');
+        const char *end = strrchr(name, '.');
+        memset(tmp, 0, sizeof(tmp));
+        if (begin && end && end > begin)
+            memcpy(tmp, begin + 1, end - begin - 1);
+        else
+            strcpy(tmp, "unknown_user");
+        database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
+        db_monitor_face_list_add(id, (char*)name, tmp, type);
+    } else {
+        printf("%s %s fail!\n", __func__, name);
+        return -1;
     }
 
     rockface_control_database();

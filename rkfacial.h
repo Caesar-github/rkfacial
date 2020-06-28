@@ -6,6 +6,7 @@ extern "C" {
 #endif
 
 #include <stdbool.h>
+#include <rockface/rockface.h>
 
 struct user_info {
     unsigned int id;
@@ -49,6 +50,8 @@ extern rkfacial_paint_box_callback rkfacial_paint_box_cb;
 typedef void (*rkfacial_paint_info_callback)(struct user_info *info, bool real);
 void register_rkfacial_paint_info(rkfacial_paint_info_callback cb);
 extern rkfacial_paint_info_callback rkfacial_paint_info_cb;
+
+void rkfacial_get_ir_face(rockface_det_t *face);
 
 #ifdef __cplusplus
 }

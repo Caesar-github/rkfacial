@@ -54,7 +54,6 @@ int rockface_control_delete(int id, const char *pname, bool notify);
 int rockface_control_add_ui(int id, const char *name, void *feature);
 int rockface_control_add_web(int id, const char *name);
 int rockface_control_add_local(const char *name);
-void rockface_control_set_ir_prepared(void);
 
 #ifdef __cplusplus
 }

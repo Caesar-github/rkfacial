@@ -116,6 +116,7 @@ static int g_rgb_track = -1;
 static pthread_mutex_t g_rgb_track_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static rockface_image_t g_ir_img;
+static rockface_det_t g_ir_face;
 static bo_t g_ir_bo;
 static int g_ir_fd = -1;
 
@@ -126,10 +127,10 @@ enum ir_state {
     IR_STATE_CANCELED,
     IR_STATE_PREPARED,
     IR_STATE_COMPLETE,
-    IR_STATE_USING,
 };
 
 enum ir_state g_ir_state;
+static int g_ir_detect_fail;
 
 static bool g_register = false;
 static int g_register_cnt = 0;
@@ -264,8 +265,6 @@ static int _rockface_control_detect(rockface_image_t *image, rockface_det_t *out
             *track = -1;
         else if (*track == face->id)
             r = -2;
-        else
-            *track = face->id;
         pthread_mutex_unlock(&g_rgb_track_mutex);
     }
 
@@ -574,18 +573,32 @@ int rockface_control_convert_feature(void *ptr, int width, int height, RgaSURF_F
 static bool rockface_control_liveness_ir(void)
 {
     rockface_ret_t ret;
-    rockface_image_t image;
-    rockface_det_array_t face_array;
     rockface_liveness_t result;
 
-    int src_w = g_ir_img.width, src_h = g_ir_img.height;
+    ret = rockface_liveness_detect(face_handle, &g_ir_img, &g_ir_face.box, &result);
+    if (ret != ROCKFACE_RET_SUCCESS)
+        return false;
+
+    if (result.real_score < FACE_REAL_SCORE)
+        return false;
+
+    return true;
+}
+
+static bool rockface_control_detect_ir(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation)
+{
+    rockface_ret_t ret;
+    rockface_det_array_t face_array;
+
+    int src_w = width, src_h = height;
     int dst_w = DET_WIDTH, dst_h = DET_HEIGHT;
     rga_info_t src, dst;
     memset(&src, 0, sizeof(rga_info_t));
     src.fd = -1;
-    src.virAddr = g_ir_bo.ptr;
+    src.virAddr = ptr;
     src.mmuFlag = 1;
-    rga_set_rect(&src.rect, 0, 0, src_w, src_h, src_w, src_h, RK_FORMAT_YCbCr_420_SP);
+    src.rotation = rotation;
+    rga_set_rect(&src.rect, 0, 0, src_w, src_h, src_w, src_h, fmt);
     memset(&dst, 0, sizeof(rga_info_t));
     dst.fd = -1;
     dst.virAddr = g_ir_det_bo.ptr;
@@ -617,20 +630,25 @@ static bool rockface_control_liveness_ir(void)
     face->box.top *= g_ratio;
     face->box.right *= g_ratio;
     face->box.bottom *= g_ratio;
-    ret = rockface_liveness_detect(face_handle, &g_ir_img, &face->box, &result);
-    if (ret != ROCKFACE_RET_SUCCESS)
-        return false;
-
-    if (result.real_score < FACE_REAL_SCORE)
-        return false;
+    memcpy(&g_ir_face, face, sizeof(rockface_det_t));
 
     return true;
 }
 
-void rockface_control_set_ir_prepared(void)
+void rkfacial_get_ir_face(rockface_det_t *face)
 {
-    if (g_ir_state == IR_STATE_CANCELED)
-        g_ir_state = IR_STATE_PREPARED;
+    int count = 10; /* try 10*10ms to get face */
+    g_ir_state = IR_STATE_PREPARED;
+
+    memset(face, 0, sizeof(rockface_det_t));
+    while (count--) {
+        if (g_ir_state == IR_STATE_COMPLETE) {
+            memcpy(face, &g_ir_face, sizeof(rockface_det_t));
+            break;
+        }
+        usleep(10000);
+    }
+    g_ir_state = IR_STATE_CANCELED;
 }
 
 int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation)
@@ -643,6 +661,9 @@ int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT
 
     if (g_ir_state != IR_STATE_PREPARED)
         return ret;
+
+    if (!rockface_control_detect_ir(ptr, width, height, fmt, rotation))
+        goto exit;
 
     memset(&g_ir_img, 0, sizeof(rockface_image_t));
     g_ir_img.pixel_format = ROCKFACE_PIXEL_FORMAT_GRAY8;
@@ -680,9 +701,16 @@ int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT
     }
 
     g_ir_state = IR_STATE_COMPLETE;
-    ret = 0;
+    rockface_control_signal();
+    return 0;
 
 exit:
+    /* ir detect 2 times may cost 130ms, should not try over 3 times */
+    if (++g_ir_detect_fail >= 2) {
+        g_ir_state = IR_STATE_CANCELED;
+        g_ir_detect_fail = 0;
+        rockface_control_signal();
+    }
     return ret;
 }
 
@@ -722,20 +750,23 @@ static void *rockface_control_detect_thread(void *arg)
             continue;
         }
 
-        if (!g_feature_flag)
+        if (!g_feature_flag || g_ir_state != IR_STATE_CANCELED)
             continue;
 
         if (g_feature.id == buf->id) {
+            g_ir_detect_fail = 0;
+            g_ir_state = IR_STATE_PREPARED;
             memcpy(&g_feature.face, &buf->face, sizeof(rockface_det_t));
             g_feature.face.box.left = buf->face.box.left * g_ratio;
             g_feature.face.box.top = buf->face.box.top * g_ratio;
             g_feature.face.box.right = buf->face.box.right * g_ratio;
             g_feature.face.box.bottom = buf->face.box.bottom * g_ratio;
-            rockface_control_signal();
             g_feature.id = 0;
+            pthread_mutex_lock(&g_rgb_track_mutex);
+            g_rgb_track = buf->face.id;
+            pthread_mutex_unlock(&g_rgb_track_mutex);
         } else if (g_feature.id < buf->id) {
             g_feature.id = 0;
-            g_ir_state = IR_STATE_CANCELED;
         }
     }
 
@@ -818,17 +849,20 @@ static void *rockface_control_feature_thread(void *arg)
             if (database_is_id_exist(result->id, result_name, NAME_LEN)) {
                 if (rkcif_control_run()) {
                     if (g_ir_state == IR_STATE_COMPLETE) {
-                        g_ir_state = IR_STATE_USING;
                         if (rockface_control_liveness_ir())
                             real = true;
+                        if (!real)
+                            memset(last_name, 0, sizeof(last_name));
+                        if (rkfacial_paint_info_cb) {
+                            struct user_info info;
+                            memset(&info, 0, sizeof(info));
+                            strncpy(info.sPicturePath, result_name, sizeof(info.sPicturePath) - 1);
+                            db_monitor_get_user_info(&info, result->id);
+                            rkfacial_paint_info_cb(&info, real);
+                        }
+                    } else {
+                        printf("IR state is not complete\n");
                     }
-                }
-                if (rkfacial_paint_info_cb) {
-                    struct user_info info;
-                    memset(&info, 0, sizeof(info));
-                    strncpy(info.sPicturePath, result_name, sizeof(info.sPicturePath) - 1);
-                    db_monitor_get_user_info(&info, result->id);
-                    rkfacial_paint_info_cb(&info, real);
                 }
                 if (!g_register && real && memcmp(last_name, result_name, sizeof(last_name))) {
                     char status[64];
@@ -860,7 +894,6 @@ static void *rockface_control_feature_thread(void *arg)
                 rkfacial_paint_info_cb(NULL, false);
         }
         if (!real) {
-            memset(last_name, 0, sizeof(last_name));
             pthread_mutex_lock(&g_rgb_track_mutex);
             g_rgb_track = -1;
             pthread_mutex_unlock(&g_rgb_track_mutex);

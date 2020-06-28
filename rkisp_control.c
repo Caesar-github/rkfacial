@@ -100,8 +100,7 @@ static void *process(void *arg)
         buf = rkisp_get_frame(ctx, 0);
 
         if (!rockface_control_convert_detect(buf->buf, ctx->width, ctx->height, RK_FORMAT_YCbCr_420_SP, g_rotation, id))
-            if (!rockface_control_convert_feature(buf->buf, ctx->width, ctx->height, RK_FORMAT_YCbCr_420_SP, g_rotation, id))
-                rockface_control_set_ir_prepared();
+            rockface_control_convert_feature(buf->buf, ctx->width, ctx->height, RK_FORMAT_YCbCr_420_SP, g_rotation, id);
 
         if (g_display_cb)
             g_display_cb(buf->buf, buf->fd, RK_FORMAT_YCbCr_420_SP,

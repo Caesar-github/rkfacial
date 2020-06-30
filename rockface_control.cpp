@@ -68,7 +68,7 @@
 #define FACE_SCORE_LANDMARK_IMAGE 0.5 /* range 0 - 1.0, higher score means higher expectation */
 #define FACE_SCORE_REGISTER 0.99 /* range 0 - 1.0, higher score means higher expectation */
 #define FACE_REGISTER_CNT 5
-#define FACE_REAL_SCORE 0.7 /* range 0 - 1.0, higher score means higher expectation */
+#define FACE_REAL_SCORE 0.5 /* range 0 - 1.0, higher score means higher expectation */
 #define LICENCE_PATH PRE_PATH "/key.lic"
 #define BAK_LICENCE_PATH BAK_PATH "/key.lic"
 #define FACE_DATA_PATH "/usr/lib"

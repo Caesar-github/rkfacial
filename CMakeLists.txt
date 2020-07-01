@@ -22,7 +22,7 @@ set(SRC
 
 include_directories(${DRM_HEADER_DIR})
 
-set(LIB rkisp rkisp_api rockface rknn_api drm rga pthread sqlite3 asound rockchip_mpp turbojpeg)
+set(LIB rkisp rkisp_api rockface rknn_api drm rga pthread sqlite3 asound rockchip_mpp turbojpeg m)
 
 if(DEFINED USE_WEB_SERVER)
 include(FindPkgConfig)

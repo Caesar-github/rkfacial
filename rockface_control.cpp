@@ -39,6 +39,7 @@
 #include <sys/time.h>
 #include <pthread.h>
 #include <errno.h>
+#include <math.h>
 
 #include <list>
 
@@ -60,11 +61,8 @@
 #define FACE_SCORE_IR 0.7 /* range 0 - 1.0, higher score means higher expectation */
 #define FACE_SCORE_LANDMARK_RUNNING 0.9 /* range 0 - 1.0, higher score means higher expectation */
 
-/*
- * suggest range 0.7 ~ 1.3, lower score
- * means need higer similarity to recognize
- */
-#define FACE_SIMILARITY_SCORE 1.0
+#define FACE_SIMILARITY_CONVERT(f) powf(2.0, -((f)))
+#define FACE_SIMILARITY_SCORE 1.0 /* suggest range 0.7 ~ 1.3, lower score means need higher similarity to recognize */
 #define FACE_SCORE_LANDMARK_IMAGE 0.5 /* range 0 - 1.0, higher score means higher expectation */
 #define FACE_SCORE_REGISTER 0.99 /* range 0 - 1.0, higher score means higher expectation */
 #define FACE_REGISTER_CNT 5
@@ -371,7 +369,7 @@ int rockface_control_get_path_feature(const char *path, void *feature)
 
 static bool rockface_control_search(rockface_image_t *image, void *data, int *index, int cnt,
                               size_t size, size_t offset, rockface_det_t *face, int reg,
-                              struct face_data* face_data)
+                              struct face_data* face_data, float *similarity)
 {
     rockface_ret_t ret;
     rockface_search_result_t result;
@@ -382,6 +380,7 @@ static bool rockface_control_search(rockface_image_t *image, void *data, int *in
         pthread_mutex_lock(&g_lib_lock);
         ret = rockface_feature_search(face_handle, &feature, FACE_SIMILARITY_SCORE, &result);
         if (ret == ROCKFACE_RET_SUCCESS) {
+            *similarity = result.similarity;
             memcpy(face_data, result.feature, sizeof(struct face_data));
             pthread_mutex_unlock(&g_lib_lock);
             if (g_register && ++g_register_cnt > FACE_REGISTER_CNT) {
@@ -786,6 +785,7 @@ static void *rockface_control_feature_thread(void *arg)
     bool ret;
     char result_name[NAME_LEN];
     int timeout;
+    float similar;
 
     while (g_run) {
         pthread_mutex_lock(&g_mutex);
@@ -831,7 +831,8 @@ static void *rockface_control_feature_thread(void *arg)
         memcpy(&face, &g_feature.face, sizeof(face));
         gettimeofday(&t0, NULL);
         ret = (struct face_data*)rockface_control_search(&g_feature.img, g_face_data, &g_face_index,
-                        g_face_cnt, sizeof(struct face_data), 0, &face, reg_timeout, &result_data);
+                        g_face_cnt, sizeof(struct face_data), 0, &face, reg_timeout, &result_data,
+                        &similar);
         if (ret) {
             result = &result_data;
         } else {
@@ -880,7 +881,7 @@ static void *rockface_control_feature_thread(void *arg)
                         mark = 'W';
                         play_wav_signal(PLEASE_GO_THROUGH_WAV);
                     }
-                    snprintf(similarity, sizeof(similarity), "%f", face.score);
+                    snprintf(similarity, sizeof(similarity), "%f", FACE_SIMILARITY_CONVERT(similar));
 #ifdef USE_WEB_SERVER
                     memset(g_snap.name, 0, sizeof(g_snap.name));
                     if (!snapshot_run(&g_snap, &g_feature.img, &face, RK_FORMAT_RGB_888, 0, mark))

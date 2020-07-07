@@ -8,6 +8,13 @@ extern "C" {
 #include <stdbool.h>
 #include <rockface/rockface.h>
 
+enum user_state {
+    USER_STATE_FAKE,
+    USER_STATE_REAL_UNREGISTERED,
+    USER_STATE_REAL_REGISTERED_WHITE,
+    USER_STATE_REAL_REGISTERED_BLACK,
+};
+
 struct user_info {
     unsigned int id;
     char sPicturePath[256];
@@ -25,6 +32,10 @@ struct user_info {
     char sHometown[32];
     char sAddress[32];
     unsigned int iAccessCardNumber;
+    enum user_state state;
+    char snap_path[256];
+    rockface_det_t ir_face;
+    rockface_det_t rgb_face;
 };
 
 typedef void (*display_callback)(void *ptr, int fd, int fmt, int w, int h, int rotation);
@@ -50,8 +61,6 @@ extern rkfacial_paint_box_callback rkfacial_paint_box_cb;
 typedef void (*rkfacial_paint_info_callback)(struct user_info *info, bool real);
 void register_rkfacial_paint_info(rkfacial_paint_info_callback cb);
 extern rkfacial_paint_info_callback rkfacial_paint_info_cb;
-
-void rkfacial_get_ir_face(rockface_det_t *face);
 
 #ifdef __cplusplus
 }

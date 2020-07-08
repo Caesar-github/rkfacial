@@ -41,12 +41,17 @@ extern "C" {
 #define WIDTH 1280
 #define HEIGHT 720
 
+#define IR_PATH "/userdata/ir"
+#define IR_REAL_PATH "/userdata/ir_real"
+#define IR_FAKE_PATH "/userdata/ir_fake"
+
 extern char g_snapshot[NAME_LEN];
 extern char g_white_list[NAME_LEN];
 extern char g_black_list[NAME_LEN];
 
 int get_video_id(char *name);
 int check_path_dir(const char *name);
+void save_file(void *buf, size_t size, const char *dir, const char *ext);
 
 #ifdef __cplusplus
 }

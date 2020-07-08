@@ -62,6 +62,9 @@ typedef void (*rkfacial_paint_info_callback)(struct user_info *info, bool real);
 void register_rkfacial_paint_info(rkfacial_paint_info_callback cb);
 extern rkfacial_paint_info_callback rkfacial_paint_info_cb;
 
+void save_ir_real(bool flag);
+void save_ir_fake(bool flag);
+
 #ifdef __cplusplus
 }
 #endif

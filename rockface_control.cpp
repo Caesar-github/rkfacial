@@ -129,6 +129,9 @@ enum ir_state {
 enum ir_state g_ir_state;
 static int g_ir_detect_fail;
 
+static bool g_ir_save_real;
+static bool g_ir_save_fake;
+
 static bool g_register = false;
 static int g_register_cnt = 0;
 static bool g_delete = false;
@@ -141,6 +144,16 @@ bool g_face_en;
 int g_face_width;
 int g_face_height;
 static int g_ratio;
+
+void save_ir_real(bool flag)
+{
+    g_ir_save_real = flag;
+}
+
+void save_ir_fake(bool flag)
+{
+    g_ir_save_fake = flag;
+}
 
 void set_face_param(int width, int height, int cnt)
 {
@@ -179,6 +192,9 @@ static void *init_thread(void *arg)
     char cmd[256];
 
     check_pre_path(PRE_PATH);
+    check_path_dir(IR_PATH);
+    check_path_dir(IR_REAL_PATH);
+    check_path_dir(IR_FAKE_PATH);
     int ret = rockface_control_init();
 
     if (ret)
@@ -644,6 +660,15 @@ void rockface_set_user_info(struct user_info *info, enum user_state state,
         memcpy(&info->rgb_face, rgb_face, sizeof(rockface_det_t));
 }
 
+static void save_ir(const char *path)
+{
+    char ext[128];
+    snprintf(ext, sizeof(ext), "(%f)[%d,%d,%d,%d]", g_ir_face.score,
+            g_ir_face.box.left, g_ir_face.box.top,
+            g_ir_face.box.right, g_ir_face.box.bottom);
+    save_file(g_ir_bo.ptr, g_ir_img.width * g_ir_img.height, path, ext);
+}
+
 int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation)
 {
     int ret = -1;
@@ -693,12 +718,24 @@ int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT
         goto exit;
     }
 
+    if (g_ir_save_real && g_ir_save_fake) {
+        save_ir(IR_PATH);
+        g_ir_state = IR_STATE_CANCELED;
+        return 0;
+    }
+
     if (rockface_control_liveness_ir()) {
         rockface_control_signal();
+
+        if (g_ir_save_real)
+            save_ir(IR_REAL_PATH);
     } else if (rkfacial_paint_info_cb) {
         struct user_info info;
         rockface_set_user_info(&info, USER_STATE_FAKE, &g_ir_face, &g_feature.face);
         rkfacial_paint_info_cb(&info, false);
+
+        if (g_ir_save_fake)
+            save_ir(IR_FAKE_PATH);
     }
 
     g_ir_state = IR_STATE_CANCELED;

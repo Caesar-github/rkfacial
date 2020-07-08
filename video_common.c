@@ -35,6 +35,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include "video_common.h"
 #include "face_common.h"
 
@@ -95,4 +96,23 @@ int check_path_dir(const char *name)
         }
     }
     return 0;
+}
+
+void save_file(void *buf, size_t size, const char *dir, const char *ext)
+{
+    struct timeval t;
+    char name[256];
+    FILE *fp;
+
+    check_path_dir(dir);
+    gettimeofday(&t, NULL);
+    snprintf(name, sizeof(name), "%s/%ld.%ld_%s", dir, t.tv_sec, t.tv_usec, ext);
+    fp = fopen(name, "wb");
+    if (fp) {
+        fwrite(buf, 1, size, fp);
+        fclose(fp);
+        printf("save %s ok.\n", name);
+    } else {
+        printf("save %s fail.\n", name);
+    }
 }

@@ -55,6 +55,12 @@
 #include "db_monitor.h"
 #include "rkfacial.h"
 
+#define TEST_RESULT_INC(x) \
+    do { \
+        if (g_test.en) \
+            g_test.x++; \
+    } while (0)
+
 #define DEFAULT_FACE_NUMBER 1000
 #define DEFAULT_FACE_PATH "/userdata"
 #define FACE_SCORE_RGB 0.55 /* range 0 - 1.0, higher score means higher expectation */
@@ -144,6 +150,48 @@ bool g_face_en;
 int g_face_width;
 int g_face_height;
 static int g_ratio;
+
+static struct test_result g_test;
+
+void rockface_start_test(void)
+{
+    if (g_test.en)
+        return;
+    /* wait feature thread done */
+    while (!g_feature_flag) {
+        usleep(10000);
+        continue;
+    }
+    memset(&g_test, 0, sizeof(struct test_result));
+    g_test.en = true;
+}
+
+static get_test_callback get_test_cb = NULL;
+void register_get_test_callback(get_test_callback cb)
+{
+    get_test_cb = cb;
+}
+
+void rockface_output_test(void)
+{
+    if (g_test.en && g_test.ir_detect_total >= 100) {
+        if (get_test_cb)
+            get_test_cb(&g_test);
+        printf("%s:\n", __func__);
+        printf("\trgb_detect: %d/%d\n", g_test.rgb_detect_ok, g_test.rgb_detect_total);
+        printf("\trgb_track: %d/%d\n", g_test.rgb_track_ok, g_test.rgb_track_total);
+        printf("\tir_detect: %d/%d\n", g_test.ir_detect_ok, g_test.ir_detect_total);
+        printf("\tir_liveness: %d/%d\n", g_test.ir_liveness_ok, g_test.ir_liveness_total);
+        printf("\trgb_landmark: %d/%d\n", g_test.rgb_landmark_ok, g_test.rgb_landmark_total);
+        printf("\trgb_align: %d/%d\n", g_test.rgb_align_ok, g_test.rgb_align_total);
+        printf("\trgb_extract: %d/%d\n", g_test.rgb_extract_ok, g_test.rgb_extract_total);
+        printf("\trgb_search: %d/%d\n", g_test.rgb_search_ok, g_test.rgb_search_total);
+
+        memset(&g_test, 0, sizeof(struct test_result));
+        g_ir_save_real = false;
+        g_ir_save_fake = false;
+    }
+}
 
 void save_ir_real(bool flag)
 {
@@ -251,14 +299,17 @@ static int _rockface_control_detect(rockface_image_t *image, rockface_det_t *out
     memset(&face_array, 0, sizeof(rockface_det_array_t));
     memset(out_face, 0, sizeof(rockface_det_t));
 
+    TEST_RESULT_INC(rgb_detect_total);
     ret = rockface_detect(face_handle, image, &face_array0);
     if (ret != ROCKFACE_RET_SUCCESS)
         return -1;
 
     if (track) {
+        TEST_RESULT_INC(rgb_track_total);
         ret = rockface_track(face_handle, image, FACE_TRACK_FRAME, &face_array0, &face_array);
         if (ret != ROCKFACE_RET_SUCCESS)
             return -1;
+        TEST_RESULT_INC(rgb_track_ok);
     } else {
         memcpy(&face_array, &face_array0, sizeof(rockface_det_array_t));
     }
@@ -270,6 +321,7 @@ static int _rockface_control_detect(rockface_image_t *image, rockface_det_t *out
         face->box.right > image->width || face->box.bottom > image->height)
         return -1;
 
+    TEST_RESULT_INC(rgb_detect_ok);
     memcpy(out_face, face, sizeof(rockface_det_t));
 
     if (track) {
@@ -301,7 +353,7 @@ static int rockface_control_detect(rockface_image_t *image, rockface_det_t *face
         gettimeofday(&t0, NULL);
     }
     pthread_mutex_unlock(&g_rgb_track_mutex);
-    ret = _rockface_control_detect(image, face, &g_rgb_track);
+    ret = _rockface_control_detect(image, face, g_test.en ? NULL : &g_rgb_track);
     if (face->score > FACE_SCORE_RGB) {
         int left, top, right, bottom;
         left = face->box.left * g_ratio;
@@ -346,20 +398,26 @@ static int rockface_control_get_feature(rockface_image_t *in_image,
     rockface_ret_t ret;
 
     rockface_landmark_t landmark;
+    TEST_RESULT_INC(rgb_landmark_total);
     ret = rockface_landmark5(face_handle, in_image, &(in_face->box), &landmark);
     if (ret != ROCKFACE_RET_SUCCESS || landmark.score < score)
         return -1;
+    TEST_RESULT_INC(rgb_landmark_ok);
 
     rockface_image_t out_img;
     memset(&out_img, 0, sizeof(rockface_image_t));
+    TEST_RESULT_INC(rgb_align_total);
     ret = rockface_align(face_handle, in_image, &(in_face->box), &landmark, &out_img);
     if (ret != ROCKFACE_RET_SUCCESS)
         return -1;
+    TEST_RESULT_INC(rgb_align_ok);
 
+    TEST_RESULT_INC(rgb_extract_total);
     ret = rockface_feature_extract(face_handle, &out_img, out_feature);
     rockface_image_release(&out_img);
     if (ret != ROCKFACE_RET_SUCCESS)
         return -1;
+    TEST_RESULT_INC(rgb_extract_ok);
 
     return 0;
 }
@@ -393,8 +451,10 @@ static bool rockface_control_search(rockface_image_t *image, void *data, int *in
     if (rockface_control_get_feature(image, &feature, face, FACE_SCORE_LANDMARK_RUNNING) == 0) {
         //printf("g_total_cnt = %d\n", ++g_total_cnt);
         pthread_mutex_lock(&g_lib_lock);
+        TEST_RESULT_INC(rgb_search_total);
         ret = rockface_feature_search(face_handle, &feature, FACE_SIMILARITY_SCORE, &result);
         if (ret == ROCKFACE_RET_SUCCESS) {
+            TEST_RESULT_INC(rgb_search_ok);
             *similarity = result.similarity;
             memcpy(face_data, result.feature, sizeof(struct face_data));
             pthread_mutex_unlock(&g_lib_lock);
@@ -589,6 +649,7 @@ static bool rockface_control_liveness_ir(void)
     rockface_ret_t ret;
     rockface_liveness_t result;
 
+    TEST_RESULT_INC(ir_liveness_total);
     ret = rockface_liveness_detect(face_handle, &g_ir_img, &g_ir_face.box, &result);
     if (ret != ROCKFACE_RET_SUCCESS)
         return false;
@@ -596,6 +657,7 @@ static bool rockface_control_liveness_ir(void)
     if (result.real_score < FACE_REAL_SCORE)
         return false;
 
+    TEST_RESULT_INC(ir_liveness_ok);
     return true;
 }
 
@@ -629,6 +691,8 @@ static bool rockface_control_detect_ir(void *ptr, int width, int height, RgaSURF
     ir_det_img.height = DET_HEIGHT;
     ir_det_img.pixel_format = ROCKFACE_PIXEL_FORMAT_RGB888;
     ir_det_img.data = (uint8_t *)g_ir_det_bo.ptr;
+    rockface_output_test();
+    TEST_RESULT_INC(ir_detect_total);
     ret = rockface_detect(face_handle, &ir_det_img, &face_array);
     if (ret != ROCKFACE_RET_SUCCESS)
         return false;
@@ -645,6 +709,7 @@ static bool rockface_control_detect_ir(void *ptr, int width, int height, RgaSURF
     face->box.right *= g_ratio;
     face->box.bottom *= g_ratio;
     memcpy(&g_ir_face, face, sizeof(rockface_det_t));
+    TEST_RESULT_INC(ir_detect_ok);
 
     return true;
 }

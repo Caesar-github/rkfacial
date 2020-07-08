@@ -38,6 +38,30 @@ struct user_info {
     rockface_det_t rgb_face;
 };
 
+struct test_result {
+    bool en;
+    int rgb_detect_total;
+    int rgb_detect_ok;
+    int rgb_track_total;
+    int rgb_track_ok;
+    int rgb_landmark_total;
+    int rgb_landmark_ok;
+    int rgb_align_total;
+    int rgb_align_ok;
+    int rgb_extract_total;
+    int rgb_extract_ok;
+    int rgb_search_total;
+    int rgb_search_ok;
+    int ir_detect_total;
+    int ir_detect_ok;
+    int ir_liveness_total;
+    int ir_liveness_ok;
+};
+
+void rockface_start_test(void);
+typedef void (*get_test_callback)(struct test_result *test);
+void register_get_test_callback(get_test_callback cb);
+
 typedef void (*display_callback)(void *ptr, int fd, int fmt, int w, int h, int rotation);
 
 void set_isp_param(int width, int height, display_callback cb, bool expo);

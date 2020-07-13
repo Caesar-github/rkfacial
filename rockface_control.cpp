@@ -946,7 +946,7 @@ int rockface_control_init(void)
         return -1;
     }
 
-    ret = rockface_init_detector2(face_handle, 1);
+    ret = rockface_init_detector2(face_handle, 5);
     if (ret != ROCKFACE_RET_SUCCESS) {
         printf("%s: init detector error %d!\n", __func__, ret);
         return -1;

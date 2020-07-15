@@ -106,7 +106,7 @@ void save_file(void *buf, size_t size, const char *dir, const char *ext)
 
     check_path_dir(dir);
     gettimeofday(&t, NULL);
-    snprintf(name, sizeof(name), "%s/%ld.%ld_%s", dir, t.tv_sec, t.tv_usec, ext);
+    snprintf(name, sizeof(name), "%s/%ld.%06ld_%s", dir, t.tv_sec, t.tv_usec, ext);
     fp = fopen(name, "wb");
     if (fp) {
         fwrite(buf, 1, size, fp);

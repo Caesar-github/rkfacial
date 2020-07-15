@@ -341,6 +341,7 @@ static int rockface_control_detect(rockface_image_t *image, rockface_det_t *face
     int ret;
     static struct timeval t0;
     struct timeval t1;
+    bool en;
 
     memset(face, 0, sizeof(rockface_det_t));
 
@@ -353,7 +354,8 @@ static int rockface_control_detect(rockface_image_t *image, rockface_det_t *face
         gettimeofday(&t0, NULL);
     }
     pthread_mutex_unlock(&g_rgb_track_mutex);
-    ret = _rockface_control_detect(image, face, g_test.en ? NULL : &g_rgb_track);
+    en = (g_test.en || g_ir_save_real || g_ir_save_fake) ? true : false;
+    ret = _rockface_control_detect(image, face, en ? NULL : &g_rgb_track);
     if (face->score > FACE_SCORE_RGB) {
         int left, top, right, bottom;
         left = face->box.left * g_ratio;
@@ -785,7 +787,6 @@ int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT
 
     if (g_ir_save_real && g_ir_save_fake) {
         save_ir(IR_PATH);
-        g_ir_state = IR_STATE_CANCELED;
         return 0;
     }
 
@@ -807,6 +808,8 @@ int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT
     return 0;
 
 exit:
+    if (g_ir_save_real && g_ir_save_fake)
+        return ret;
     /* ir detect 2 times may cost 130ms, should not try over 3 times */
     if (++g_ir_detect_fail >= 2) {
         g_ir_state = IR_STATE_CANCELED;

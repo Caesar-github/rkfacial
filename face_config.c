@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Rockchip Electronics Co., Ltd.
+ * Copyright (C) 2020 Rockchip Electronics Co., Ltd.
  * author: Zhihua Wang, hogan.wang@rock-chips.com
  *
  * This software is available to you under a choice of one of two
@@ -30,25 +30,26 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef __DB_MONITOR_H__
-#define __DB_MONITOR_H__
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include "rkfacial.h"
 #include "face_config.h"
 
-void db_monitor_init();
-void db_monitor_face_list_add(int id, char *path, char *name, char *type);
-void db_monitor_face_list_delete(int id);
-void db_monitor_snapshot_record_set(char *path);
-void db_monitor_control_record_set(int face_id, char *path, char *status, char *similarity);
-void db_monitor_get_user_info(struct user_info *info, int i);
+struct face_config g_face_config;
 
-#ifdef __cplusplus
-}
-#endif
+#define GET_FACE_CONFIG_FUNC(val) \
+    bool get_face_config_##val(int *arg) \
+    { \
+        if (!g_face_config.en) \
+            return false; \
+        *arg = g_face_config.val; \
+        return true; \
+    }
 
-#endif
+GET_FACE_CONFIG_FUNC(volume)
+GET_FACE_CONFIG_FUNC(live_det_en)
+GET_FACE_CONFIG_FUNC(live_det_th)
+GET_FACE_CONFIG_FUNC(face_det_th)
+GET_FACE_CONFIG_FUNC(face_rec_th)
+GET_FACE_CONFIG_FUNC(min_pixel)
+GET_FACE_CONFIG_FUNC(corner_x)
+GET_FACE_CONFIG_FUNC(corner_y)
+GET_FACE_CONFIG_FUNC(det_width)
+GET_FACE_CONFIG_FUNC(det_height)

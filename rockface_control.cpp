@@ -63,8 +63,7 @@
 
 #define DEFAULT_FACE_NUMBER 1000
 #define DEFAULT_FACE_PATH "/userdata"
-#define FACE_SCORE_RGB 0.55 /* range 0 - 1.0, higher score means higher expectation */
-#define FACE_SCORE_IR 0.7 /* range 0 - 1.0, higher score means higher expectation */
+#define FACE_DETECT_SCORE 0.55 /* range 0 - 1.0, higher score means higher expectation */
 #define FACE_SCORE_LANDMARK_RUNNING 0.9 /* range 0 - 1.0, higher score means higher expectation */
 
 #define FACE_SIMILARITY_CONVERT(f) powf(2.0, -((f)))
@@ -207,8 +206,8 @@ void set_face_param(int width, int height, int cnt)
 {
     int tmp = width < height ? width : height;
     g_face_en = true;
-    g_face_width = width;
-    g_face_height = height;
+    g_face_width = width < height ? width : height;
+    g_face_height = width > height ? width : height;
     g_face_cnt = cnt;
     g_ratio = tmp / DET_WIDTH;
 }
@@ -265,6 +264,51 @@ void rockface_control_init_thread(void)
         printf("%s fail!\n", __func__);
 }
 
+static int get_min_pixel(int img_width)
+{
+    int pixel;
+    int min_pixel;
+    if (get_face_config_min_pixel(&pixel))
+        min_pixel = pixel;
+    else
+        min_pixel = MIN_FACE_WIDTH(img_width);
+    return min_pixel;
+}
+
+static float get_face_recognition_score(void)
+{
+    int th;
+    float score;
+    if (get_face_config_face_rec_th(&th))
+        score = th * 1.0 / 100.0;
+    else
+        score = FACE_SIMILARITY_SCORE;
+    return score;
+}
+
+
+static float get_face_detect_score(void)
+{
+    int th;
+    float score;
+    if (get_face_config_face_det_th(&th))
+        score = th * 1.0 / 100.0;
+    else
+        score = FACE_DETECT_SCORE;
+    return score;
+}
+
+static float get_live_detect_score(void)
+{
+    int th;
+    float score;
+    if (get_face_config_live_det_th(&th))
+        score = th * 1.0 / 100.0;
+    else
+        score = FACE_REAL_SCORE;
+    return score;
+}
+
 static rockface_det_t *get_max_face(rockface_det_array_t *face_array)
 {
     rockface_det_t *max_face = NULL;
@@ -286,6 +330,45 @@ static rockface_det_t *get_max_face(rockface_det_array_t *face_array)
     }
 
     return max_face;
+}
+
+static bool check_face_region(rockface_rect_t *box, int img_width, int img_height)
+{
+    int x, y, w, h;
+    int xx = 100, yy = 100, ww = g_face_width - 200, hh = g_face_height - 200;
+
+    if (!get_face_config_corner_x(&x))
+        x = xx;
+    if (!get_face_config_corner_y(&y))
+        y = yy;
+    if (!get_face_config_det_width(&w))
+        w = ww;
+    if (!get_face_config_det_height(&h))
+        h = hh;
+
+    if (x < xx)
+        x = xx;
+    if (y < yy)
+        y = yy;
+    if (x + w > g_face_width - 100)
+        w = g_face_width - 100 - x;
+    if (y + h > g_face_height - 100)
+        h = g_face_height - 100 - y;
+
+    if (w <= 0 || h <= 0)
+        return false;
+
+    if (img_width == DET_WIDTH) {
+        x /= g_ratio;
+        y /= g_ratio;
+        w /= g_ratio;
+        h /= g_ratio;
+    }
+
+    if (box->left < x || box->top < y || box->right > x + w || box->bottom > y + h)
+        return false;
+
+    return true;
 }
 
 static int _rockface_control_detect(rockface_image_t *image, rockface_det_t *out_face, int *track)
@@ -315,10 +398,11 @@ static int _rockface_control_detect(rockface_image_t *image, rockface_det_t *out
     }
 
     rockface_det_t* face = get_max_face(&face_array);
-    if (face == NULL || face->score < FACE_SCORE_RGB ||
-        face->box.right - face->box.left < MIN_FACE_WIDTH(image->width) ||
-        face->box.left < 0 || face->box.top < 0 ||
-        face->box.right > image->width || face->box.bottom > image->height)
+    if (face == NULL || face->score < get_face_detect_score() ||
+        face->box.right - face->box.left < get_min_pixel(image->width))
+        return -1;
+
+    if (!check_face_region(&face->box, image->width, image->height))
         return -1;
 
     TEST_RESULT_INC(rgb_detect_ok);
@@ -356,7 +440,7 @@ static int rockface_control_detect(rockface_image_t *image, rockface_det_t *face
     pthread_mutex_unlock(&g_rgb_track_mutex);
     en = (g_test.en || g_ir_save_real || g_ir_save_fake) ? true : false;
     ret = _rockface_control_detect(image, face, en ? NULL : &g_rgb_track);
-    if (face->score > FACE_SCORE_RGB) {
+    if (face->score > get_face_detect_score()) {
         int left, top, right, bottom;
         left = face->box.left * g_ratio;
         top = face->box.top * g_ratio;
@@ -454,7 +538,7 @@ static bool rockface_control_search(rockface_image_t *image, void *data, int *in
         //printf("g_total_cnt = %d\n", ++g_total_cnt);
         pthread_mutex_lock(&g_lib_lock);
         TEST_RESULT_INC(rgb_search_total);
-        ret = rockface_feature_search(face_handle, &feature, FACE_SIMILARITY_SCORE, &result);
+        ret = rockface_feature_search(face_handle, &feature, get_face_recognition_score(), &result);
         if (ret == ROCKFACE_RET_SUCCESS) {
             TEST_RESULT_INC(rgb_search_ok);
             *similarity = result.similarity;
@@ -656,7 +740,7 @@ static bool rockface_control_liveness_ir(void)
     if (ret != ROCKFACE_RET_SUCCESS)
         return false;
 
-    if (result.real_score < FACE_REAL_SCORE)
+    if (result.real_score < get_live_detect_score())
         return false;
 
     TEST_RESULT_INC(ir_liveness_ok);
@@ -700,10 +784,11 @@ static bool rockface_control_detect_ir(void *ptr, int width, int height, RgaSURF
         return false;
 
     rockface_det_t* face = get_max_face(&face_array);
-    if (face == NULL || face->score < FACE_SCORE_IR ||
-        face->box.right - face->box.left < MIN_FACE_WIDTH(ir_det_img.width) ||
-        face->box.left < 0 || face->box.top < 0 ||
-        face->box.right > ir_det_img.width || face->box.bottom > ir_det_img.height)
+    if (face == NULL || face->score < get_face_detect_score() ||
+        face->box.right - face->box.left < get_min_pixel(ir_det_img.width))
+        return false;
+
+    if (!check_face_region(&face->box, ir_det_img.width, ir_det_img.height))
         return false;
 
     face->box.left *= g_ratio;
@@ -863,6 +948,7 @@ static void *rockface_control_detect_thread(void *arg)
             continue;
 
         if (g_feature.id == buf->id) {
+            int live_det_en = true;
             memcpy(&g_feature.face, &buf->face, sizeof(rockface_det_t));
             g_feature.face.box.left = buf->face.box.left * g_ratio;
             g_feature.face.box.top = buf->face.box.top * g_ratio;
@@ -872,7 +958,8 @@ static void *rockface_control_detect_thread(void *arg)
             pthread_mutex_lock(&g_rgb_track_mutex);
             g_rgb_track = buf->face.id;
             pthread_mutex_unlock(&g_rgb_track_mutex);
-            if (rkcif_control_run()) {
+            get_face_config_live_det_en(&live_det_en);
+            if (rkcif_control_run() && live_det_en) {
                 memset(&g_ir_face, 0, sizeof(rockface_det_t));
                 g_ir_detect_fail = 0;
                 g_ir_state = IR_STATE_PREPARED;
@@ -961,7 +1048,7 @@ static void *rockface_control_feature_thread(void *arg)
                 rockface_set_user_info(&info, USER_STATE_REAL_UNREGISTERED, &g_ir_face, &g_feature.face);
                 rkfacial_paint_info_cb(&info, true);
             }
-        } else if (result && face.score > FACE_SCORE_RGB) {
+        } else if (result && face.score > get_face_detect_score()) {
             if (database_is_id_exist(result->id, result_name, NAME_LEN)) {
                 if (!g_register && memcmp(last_name, result_name, sizeof(last_name))) {
                     char status[64];
@@ -1007,7 +1094,7 @@ static void *rockface_control_feature_thread(void *arg)
             }
         }
 #if 0
-        if (face.score > FACE_SCORE_RGB)
+        if (face.score > get_face_detect_score())
             printf("box = (%d %d %d %d) score = %f\n", face.box.left, face.box.top,
                     face.box.right, face.box.bottom, face.score);
 #endif

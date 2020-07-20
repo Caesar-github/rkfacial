@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Rockchip Electronics Co., Ltd.
+ * Copyright (C) 2020 Rockchip Electronics Co., Ltd.
  * author: Zhihua Wang, hogan.wang@rock-chips.com
  *
  * This software is available to you under a choice of one of two
@@ -30,25 +30,42 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef __DB_MONITOR_H__
-#define __DB_MONITOR_H__
-
+#ifndef __FACE_CONFIG_H__
+#define __FACE_CONFIG_H__
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "rkfacial.h"
-#include "face_config.h"
+#include <stdbool.h>
 
-void db_monitor_init();
-void db_monitor_face_list_add(int id, char *path, char *name, char *type);
-void db_monitor_face_list_delete(int id);
-void db_monitor_snapshot_record_set(char *path);
-void db_monitor_control_record_set(int face_id, char *path, char *status, char *similarity);
-void db_monitor_get_user_info(struct user_info *info, int i);
+struct face_config {
+    bool en;
+    int volume;
+    int live_det_en;
+    int live_det_th;
+    int face_det_th;
+    int face_rec_th;
+    int min_pixel;
+    int corner_x;
+    int corner_y;
+    int det_width;
+    int det_height;
+};
+
+extern struct face_config g_face_config;
+
+bool get_face_config_det_height(int *height);
+bool get_face_config_det_width(int *width);
+bool get_face_config_corner_y(int *y);
+bool get_face_config_corner_x(int *x);
+bool get_face_config_min_pixel(int *pixel);
+bool get_face_config_face_rec_th(int *th);
+bool get_face_config_face_det_th(int *th);
+bool get_face_config_live_det_th(int *th);
+bool get_face_config_live_det_en(int *en);
+bool get_face_config_volume(int *volume);
 
 #ifdef __cplusplus
 }
 #endif
-
 #endif

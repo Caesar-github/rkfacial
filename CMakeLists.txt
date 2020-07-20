@@ -20,6 +20,7 @@ set(SRC
     turbojpeg_decode.c
     rkdrm_display.c
     display.c
+    face_config.c
 )
 
 include_directories(${DRM_HEADER_DIR})

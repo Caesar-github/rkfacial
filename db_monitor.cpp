@@ -178,6 +178,36 @@ static void *db_monitor_thread(void *arg)
     pthread_exit(NULL);
 }
 
+static void get_face_config(json_object *j_obj)
+{
+    if (!j_obj)
+        return;
+    g_face_config.en = true;
+    g_face_config.volume = json_object_get_int(json_object_object_get(j_obj, "iPromptVolume"));
+    const char *live_det = json_object_get_string(json_object_object_get(j_obj, "sLiveDetect"));
+    if (live_det && !strncmp(live_det, "open", strlen("open")))
+        g_face_config.live_det_en = 1;
+    g_face_config.live_det_th = json_object_get_int(json_object_object_get(j_obj, "iLiveDetectThreshold"));
+    g_face_config.face_det_th = json_object_get_int(json_object_object_get(j_obj, "iFaceDetectionThreshold"));
+    g_face_config.face_rec_th = json_object_get_int(json_object_object_get(j_obj, "iFaceRecognitionThreshold"));
+    g_face_config.min_pixel = json_object_get_int(json_object_object_get(j_obj, "iFaceMinPixel"));
+    g_face_config.corner_x = json_object_get_int(json_object_object_get(j_obj, "iLeftCornerX"));
+    g_face_config.corner_y = json_object_get_int(json_object_object_get(j_obj, "iLeftCornerY"));
+    g_face_config.det_width = json_object_get_int(json_object_object_get(j_obj, "iDetectWidth"));
+    g_face_config.det_height = json_object_get_int(json_object_object_get(j_obj, "iDetectHeight"));
+    printf("face_config: en %d\n", g_face_config.en);
+    printf("             volume %d\n", g_face_config.volume);
+    printf("             live_det_en %d\n", g_face_config.live_det_en);
+    printf("             live_det_th %d\n", g_face_config.live_det_th);
+    printf("             face_det_th %d\n", g_face_config.face_det_th);
+    printf("             face_rec_th %d\n", g_face_config.face_rec_th);
+    printf("             min_pixel %d\n", g_face_config.min_pixel);
+    printf("             corner_x %d\n", g_face_config.corner_x);
+    printf("             corner_y %d\n", g_face_config.corner_y);
+    printf("             det_width %d\n", g_face_config.det_width);
+    printf("             det_height %d\n", g_face_config.det_height);
+}
+
 void db_monitor_run(void *json_str)
 {
     if (!json_str) {
@@ -188,7 +218,12 @@ void db_monitor_run(void *json_str)
     json_object *j_table = json_object_object_get(j_cfg, "table");
 
     const char *table = json_object_get_string(j_table);
-    if (!strstr(table, "FaceList")) {
+    if (strstr(table, "FaceConfig")) {
+        json_object *j_data = json_object_object_get(j_cfg, "data");
+        get_face_config(j_data);
+        json_object_put(j_cfg);
+        return;
+    } else if (!strstr(table, "FaceList")) {
         json_object_put(j_cfg);
         return;
     }
@@ -357,6 +392,7 @@ void db_monitor_init()
 static void db_monitor_check(void)
 {
     char *json_str = NULL;
+    json_object *j_config;
 
     db_monitor_storage_init();
 
@@ -372,7 +408,14 @@ static void db_monitor_check(void)
 
     json_str = dbserver_event_get("FaceConfig");
     if (json_str) {
-        printf("FaceConfig: %s\n", json_str);
+        j_config = json_tokener_parse(json_str);
+        int ret = json_object_get_int(json_object_object_get(j_config, "iReturn"));
+        if (ret == 0) {
+            json_object *j_data = json_object_object_get(j_config, "jData");
+            json_object *j_obj = json_object_array_get_idx(j_data, 0);
+            get_face_config(j_obj);
+        }
+        json_object_put(j_config);
         free(json_str);
     }
 

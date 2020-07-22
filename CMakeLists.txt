@@ -25,7 +25,17 @@ set(SRC
 
 include_directories(${DRM_HEADER_DIR})
 
-set(LIB rkisp rkisp_api rockface rknn_api drm rga pthread sqlite3 asound rockchip_mpp turbojpeg m)
+set(LIB rockface rknn_api drm rga pthread sqlite3 asound rockchip_mpp turbojpeg m)
+
+if (DEFINED CAMERA_ENGINE_RKISP)
+    set(LIB ${LIB} rkisp rkisp_api)
+    add_definitions(-DCAMERA_ENGINE_RKISP)
+endif()
+
+if (DEFINED CAMERA_ENGINE_RKAIQ)
+    set(LIB ${LIB} rkaiq rkisp_api)
+    add_definitions(-DCAMERA_ENGINE_RKAIQ)
+endif()
 
 if(DEFINED USE_WEB_SERVER)
 include(FindPkgConfig)

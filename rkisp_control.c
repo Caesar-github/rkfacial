@@ -35,7 +35,12 @@
 #include "rockface_control.h"
 #include "video_common.h"
 
+#ifdef CAMERA_ENGINE_RKISP
 #include <camera_engine_rkisp/interface/rkisp_api.h>
+#endif
+#ifdef CAMERA_ENGINE_RKAIQ
+#include <rkaiq/rkisp_api.h>
+#endif
 #include "rga_control.h"
 #include "rkfacial.h"
 
@@ -124,12 +129,18 @@ static void *process(void *arg)
 
 int rkisp_control_init(void)
 {
+    int id = -1;
     char name[32];
 
     if (!g_isp_en)
         return 0;
 
-    int id = get_video_id("rkisp1_mainpath");
+#ifdef CAMERA_ENGINE_RKISP
+    id = get_video_id("rkisp1_mainpath");
+#endif
+#ifdef CAMERA_ENGINE_RKAIQ
+    id = get_video_id("rkispp_scale0");
+#endif
     if (id < 0) {
         printf("%s: get video id fail!\n", __func__);
         return -1;
@@ -150,6 +161,7 @@ int rkisp_control_init(void)
     if (rkisp_start_capture(ctx))
         return -1;
 
+#ifdef CAMERA_ENGINE_RKISP
     rkisp_get_expo_weights(ctx, weights, sizeof(weights));
     printf("default weights:\n");
     for (int i = 0; i < 81; i++) {
@@ -158,6 +170,7 @@ int rkisp_control_init(void)
             printf("\n");
     }
     printf("\n");
+#endif
 
     g_run = true;
     if (pthread_create(&g_tid, NULL, process, NULL)) {
@@ -185,6 +198,7 @@ void rkisp_control_exit(void)
 
 static void rkisp_control_expo_weights_270(int left, int top, int right, int bottom)
 {
+#ifdef CAMERA_ENGINE_RKISP
     if (!g_isp_en)
         return;
 
@@ -208,10 +222,12 @@ static void rkisp_control_expo_weights_270(int left, int top, int right, int bot
         rkisp_set_expo_weights(ctx, weights, sizeof(weights));
         g_def_expo_weights = false;
     }
+#endif
 }
 
 static void rkisp_control_expo_weights_90(int left, int top, int right, int bottom)
 {
+#ifdef CAMERA_ENGINE_RKISP
     if (!g_isp_en)
         return;
 
@@ -235,6 +251,7 @@ static void rkisp_control_expo_weights_90(int left, int top, int right, int bott
         rkisp_set_expo_weights(ctx, weights, sizeof(weights));
         g_def_expo_weights = false;
     }
+#endif
 }
 
 void rkisp_control_expo_weights(int left, int top, int right, int bottom)
@@ -247,6 +264,7 @@ void rkisp_control_expo_weights(int left, int top, int right, int bottom)
 
 void rkisp_control_expo_weights_default(void)
 {
+#ifdef CAMERA_ENGINE_RKISP
     if (!g_isp_en)
         return;
 
@@ -256,4 +274,5 @@ void rkisp_control_expo_weights_default(void)
             rkisp_set_expo_weights(ctx, weights, sizeof(weights));
         }
     }
+#endif
 }

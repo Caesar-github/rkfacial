@@ -35,7 +35,12 @@
 #include "rockface_control.h"
 #include "video_common.h"
 
+#ifdef CAMERA_ENGINE_RKISP
 #include <camera_engine_rkisp/interface/rkisp_api.h>
+#endif
+#ifdef CAMERA_ENGINE_RKAIQ
+#include <rkaiq/rkisp_api.h>
+#endif
 #include "rga_control.h"
 #include <linux/media-bus-format.h>
 #include "rkfacial.h"

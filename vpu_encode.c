@@ -179,6 +179,7 @@ int vpu_encode_jpeg_doing(struct vpu_encode* encode,
     if (encode->packet)
         mpp_packet_deinit(&encode->packet);
     mpp_packet_init_with_buffer(&encode->packet, str_buf);
+    mpp_packet_set_length(encode->packet, 0);
     //mpp_log_f("mpp import input fd %d output fd %d", mpp_buffer_get_fd(pic_buf),
     //          mpp_buffer_get_fd(str_buf));
 

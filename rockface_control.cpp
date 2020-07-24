@@ -279,10 +279,13 @@ static float get_face_recognition_score(void)
 {
     int th;
     float score;
-    if (get_face_config_face_rec_th(&th))
-        score = th * 1.0 / 100.0;
-    else
+    if (get_face_config_face_rec_th(&th)) {
+        th = th < 1 ? 1 : th;
+        th = th > 100 ? 100 : th;
+        score = log(100.0 / (th * 1.0)) / log(2);
+    } else {
         score = FACE_SIMILARITY_SCORE;
+    }
     return score;
 }
 

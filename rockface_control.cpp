@@ -244,9 +244,6 @@ static void *init_thread(void *arg)
     check_path_dir(IR_FAKE_PATH);
     int ret = rockface_control_init();
 
-    if (ret)
-        play_wav_signal(AUTHORIZE_FAIL_WAV);
-
     check_pre_path(BAK_PATH);
     snprintf(cmd, sizeof(cmd), "cp %s %s", LICENCE_PATH, BAK_LICENCE_PATH);
     system(cmd);
@@ -1132,7 +1129,7 @@ int rockface_control_init(void)
     ret = rockface_set_licence(face_handle, LICENCE_PATH);
     if (ret != ROCKFACE_RET_SUCCESS) {
         printf("%s: authorization error %d!\n", __func__, ret);
-        return -1;
+        play_wav_signal(AUTHORIZE_FAIL_WAV);
     }
     ret = rockface_set_data_path(face_handle, FACE_DATA_PATH);
     if (ret != ROCKFACE_RET_SUCCESS) {

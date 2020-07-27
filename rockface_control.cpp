@@ -962,7 +962,7 @@ static void *rockface_control_detect_thread(void *arg)
             g_rgb_track = buf->face.id;
             pthread_mutex_unlock(&g_rgb_track_mutex);
             get_face_config_live_det_en(&live_det_en);
-            if (rkcif_control_run() && live_det_en) {
+            if (live_det_en) {
                 memset(&g_ir_face, 0, sizeof(rockface_det_t));
                 g_ir_detect_fail = 0;
                 g_ir_state = IR_STATE_PREPARED;

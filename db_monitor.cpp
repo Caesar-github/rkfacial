@@ -185,8 +185,12 @@ static void get_face_config(json_object *j_obj)
     g_face_config.en = true;
     g_face_config.volume = json_object_get_int(json_object_object_get(j_obj, "iPromptVolume"));
     const char *live_det = json_object_get_string(json_object_object_get(j_obj, "sLiveDetect"));
-    if (live_det && !strncmp(live_det, "open", strlen("open")))
-        g_face_config.live_det_en = 1;
+    if (live_det) {
+        if (!strncmp(live_det, "open", strlen("open")))
+            g_face_config.live_det_en = 1;
+        else
+            g_face_config.live_det_en = 0;
+    }
     g_face_config.live_det_th = json_object_get_int(json_object_object_get(j_obj, "iLiveDetectThreshold"));
     g_face_config.face_det_th = json_object_get_int(json_object_object_get(j_obj, "iFaceDetectionThreshold"));
     g_face_config.face_rec_th = json_object_get_int(json_object_object_get(j_obj, "iFaceRecognitionThreshold"));

@@ -401,12 +401,15 @@ static int _rockface_control_detect(rockface_image_t *image, rockface_det_t *out
     }
 
     rockface_det_t* face = get_max_face(&face_array);
-    if (face == NULL || face->score < get_face_detect_score() ||
-        face->box.right - face->box.left < get_min_pixel(image->width))
+    if (face == NULL || face->score < get_face_detect_score())
         return -1;
 
-    if (!check_face_region(&face->box, image->width, image->height))
-        return -1;
+    if (track) {
+        if (face->box.right - face->box.left < get_min_pixel(image->width))
+            return -1;
+        if (!check_face_region(&face->box, image->width, image->height))
+            return -1;
+    }
 
     TEST_RESULT_INC(rgb_detect_ok);
     memcpy(out_face, face, sizeof(rockface_det_t));

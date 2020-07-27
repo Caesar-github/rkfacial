@@ -269,7 +269,7 @@ static int get_min_pixel(int img_width)
     int pixel;
     int min_pixel;
     if (get_face_config_min_pixel(&pixel))
-        min_pixel = pixel;
+        min_pixel = pixel * img_width / g_face_width;
     else
         min_pixel = MIN_FACE_WIDTH(img_width);
     return min_pixel;

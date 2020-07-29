@@ -257,7 +257,7 @@ static void *play_wav_thread(void *arg)
         play_wav(g_filename);
         sleep(1);
 #else
-        snprintf(cmd, sizeof(cmd), "aplay %s", g_filename);
+        snprintf(cmd, sizeof(cmd), "aplay %s --period-size=512 --buffer-size=2048 --start-delay=64000", g_filename);
         system(cmd);
 #endif
         g_flag = false;

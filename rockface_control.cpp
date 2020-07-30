@@ -131,7 +131,7 @@ enum ir_state {
     IR_STATE_PREPARED,
 };
 
-enum ir_state g_ir_state;
+static enum ir_state g_ir_state = IR_STATE_CANCELED;
 static int g_ir_detect_fail;
 
 static bool g_ir_save_real;
@@ -917,6 +917,7 @@ static void *rockface_control_detect_thread(void *arg)
     rga_info_t src, dst;
     int det;
     struct face_buf *buf = NULL;
+    int live_det_en;
 
     while (g_run) {
         if (buf) {
@@ -947,11 +948,12 @@ static void *rockface_control_detect_thread(void *arg)
             continue;
         }
 
-        if (!g_feature_flag || g_ir_state != IR_STATE_CANCELED)
+        if (!get_face_config_live_det_en(&live_det_en))
+            live_det_en = true;
+        if (!g_feature_flag || (live_det_en && g_ir_state != IR_STATE_CANCELED))
             continue;
 
         if (g_feature.id == buf->id) {
-            int live_det_en = true;
             memcpy(&g_feature.face, &buf->face, sizeof(rockface_det_t));
             g_feature.face.box.left = buf->face.box.left * g_ratio;
             g_feature.face.box.top = buf->face.box.top * g_ratio;
@@ -961,7 +963,6 @@ static void *rockface_control_detect_thread(void *arg)
             pthread_mutex_lock(&g_rgb_track_mutex);
             g_rgb_track = buf->face.id;
             pthread_mutex_unlock(&g_rgb_track_mutex);
-            get_face_config_live_det_en(&live_det_en);
             if (live_det_en) {
                 memset(&g_ir_face, 0, sizeof(rockface_det_t));
                 g_ir_detect_fail = 0;

@@ -239,9 +239,6 @@ static void *init_thread(void *arg)
     char cmd[256];
 
     check_pre_path(PRE_PATH);
-    check_path_dir(IR_PATH);
-    check_path_dir(IR_REAL_PATH);
-    check_path_dir(IR_FAKE_PATH);
     int ret = rockface_control_init();
 
     check_pre_path(BAK_PATH);

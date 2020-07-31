@@ -1102,6 +1102,12 @@ static void *rockface_control_feature_thread(void *arg)
                 rockface_set_user_info(&info, USER_STATE_REAL_UNREGISTERED, &g_ir_face, &g_feature.face);
                 rkfacial_paint_info_cb(&info, true);
             }
+            if (rkfacial_paint_face_cb) {
+                int x, y, w, h;
+                face_convert(&g_feature.face, &x, &y, &w, &h, g_feature.img.width, g_feature.img.height);
+                rkfacial_paint_face_cb(g_feature.bo.ptr, RK_FORMAT_RGB_888, g_feature.img.width, g_feature.img.height,
+                                       x, y, w, h);
+            }
         }
 #if 0
         if (face.score > get_face_detect_score())

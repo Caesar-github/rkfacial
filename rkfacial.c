@@ -104,3 +104,9 @@ void register_rkfacial_paint_info(rkfacial_paint_info_callback cb)
 {
     rkfacial_paint_info_cb = cb;
 }
+
+rkfacial_paint_face_callback rkfacial_paint_face_cb = NULL;
+void register_rkfacial_paint_face(rkfacial_paint_face_callback cb)
+{
+    rkfacial_paint_face_cb = cb;
+}

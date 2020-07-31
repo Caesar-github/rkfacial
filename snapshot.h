@@ -58,6 +58,7 @@ int snapshot_init(struct snapshot *s, int w, int h);
 void snapshot_exit(struct snapshot *s);
 int snapshot_run(struct snapshot *s, rockface_image_t *image, rockface_det_t *face,
                  RgaSURF_FORMAT fmt, long int sec, char mark);
+void face_convert(rockface_det_t *face, int *x, int *y, int *w, int *h, int width, int height);
 
 #ifdef __cplusplus
 }

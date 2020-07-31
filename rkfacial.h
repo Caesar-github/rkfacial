@@ -92,6 +92,10 @@ extern rkfacial_paint_info_callback rkfacial_paint_info_cb;
 void save_ir_real(bool flag);
 void save_ir_fake(bool flag);
 
+typedef void (*rkfacial_paint_face_callback)(void *ptr, int fmt, int width, int height, int x, int y, int w, int h);
+void register_rkfacial_paint_face(rkfacial_paint_face_callback cb);
+extern rkfacial_paint_face_callback rkfacial_paint_face_cb;
+
 #ifdef __cplusplus
 }
 #endif

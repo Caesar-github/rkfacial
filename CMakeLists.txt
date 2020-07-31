@@ -53,6 +53,10 @@ set(LIB ${LIB}
 add_definitions(-DUSE_WEB_SERVER)
 endif()
 
+if(DEFINED IR_TEST_DATA)
+add_definitions(-DIR_TEST_DATA)
+endif()
+
 add_library(rkfacial SHARED ${SRC})
 target_link_libraries(rkfacial ${LIB})
 

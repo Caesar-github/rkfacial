@@ -152,6 +152,12 @@ static int g_ratio;
 
 static struct test_result g_test;
 
+#ifdef IR_TEST_DATA
+static bo_t g_test_bo;
+static int g_test_fd;
+#endif
+
+
 void rockface_start_test(void)
 {
     if (g_test.en)
@@ -964,6 +970,13 @@ static void *rockface_control_detect_thread(void *arg)
                 memset(&g_ir_face, 0, sizeof(rockface_det_t));
                 g_ir_detect_fail = 0;
                 g_ir_state = IR_STATE_PREPARED;
+#ifdef IR_TEST_DATA
+                if (!rkcif_control_run()) {
+                    rockface_control_convert_ir(g_test_bo.ptr, g_face_width, g_face_height,
+                                                RK_FORMAT_YCbCr_420_SP, 0);
+                    g_ir_state = IR_STATE_CANCELED;
+                }
+#endif
             } else {
                 rockface_control_signal();
             }
@@ -1206,6 +1219,18 @@ int rockface_control_init(void)
     if (rga_control_buffer_init(&g_feature.bo, &g_feature.fd, width, height, 24))
         return -1;
 
+#ifdef IR_TEST_DATA
+    if (rga_control_buffer_init(&g_test_bo, &g_test_fd, width, height, 12))
+        return -1;
+    FILE *fp = fopen("/oem/ir.yuv", "rb");
+    if (!fp) {
+        printf("open ir.yuv failed!\n");
+        return -1;
+    }
+    fread(g_test_bo.ptr, 1, width * height * 3 / 2, fp);
+    fclose(fp);
+#endif
+
     if (rga_control_buffer_init(&g_ir_bo, &g_ir_fd, width, height, 12))
         return -1;
     if (rga_control_buffer_init(&g_ir_det_bo, &g_ir_det_fd, DET_WIDTH, DET_HEIGHT, 24))
@@ -1257,6 +1282,9 @@ void rockface_control_exit(void)
         rga_control_buffer_deinit(&g_detect[i].bo, g_detect[i].fd);
     }
     rga_control_buffer_deinit(&g_feature.bo, g_feature.fd);
+#ifdef IR_TEST_DATA
+    rga_control_buffer_deinit(&g_test_bo, g_test_fd);
+#endif
     rga_control_buffer_deinit(&g_ir_bo, g_ir_fd);
     rga_control_buffer_deinit(&g_ir_det_bo, g_ir_det_fd);
     snapshot_exit(&g_snap);

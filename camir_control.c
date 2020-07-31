@@ -50,14 +50,14 @@ static const struct rkisp_api_buf *buf;
 static bool g_run;
 static pthread_t g_tid;
 
-static bool g_cif_en;
-static int g_cif_width;
-static int g_cif_height;
+static bool g_ir_en;
+static int g_ir_width;
+static int g_ir_height;
 static display_callback g_display_cb = NULL;
 static pthread_mutex_t g_display_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_rotation = HAL_TRANSFORM_ROT_270;
 
-void set_cif_rotation(int angle)
+void set_ir_rotation(int angle)
 {
     if (angle == 90)
         g_rotation = HAL_TRANSFORM_ROT_90;
@@ -65,19 +65,19 @@ void set_cif_rotation(int angle)
         g_rotation = HAL_TRANSFORM_ROT_270;
 }
 
-void set_cif_display(display_callback cb)
+void set_ir_display(display_callback cb)
 {
     pthread_mutex_lock(&g_display_lock);
     g_display_cb = cb;
     pthread_mutex_unlock(&g_display_lock);
 }
 
-void set_cif_param(int width, int height, display_callback cb)
+void set_ir_param(int width, int height, display_callback cb)
 {
-    g_cif_en = true;
-    g_cif_width = width;
-    g_cif_height = height;
-    set_cif_display(cb);
+    g_ir_en = true;
+    g_ir_width = width;
+    g_ir_height = height;
+    set_ir_display(cb);
 }
 
 static void *process(void *arg)
@@ -103,11 +103,11 @@ static void *process(void *arg)
     pthread_exit(NULL);
 }
 
-int rkcif_control_init(void)
+int camir_control_init(void)
 {
     char name[32];
 
-    if (!g_cif_en)
+    if (!g_ir_en)
         return 0;
 
     int id = get_video_id("stream_cif_dvp");
@@ -141,9 +141,9 @@ int rkcif_control_init(void)
     return 0;
 }
 
-void rkcif_control_exit(void)
+void camir_control_exit(void)
 {
-    if (!g_cif_en)
+    if (!g_ir_en)
         return;
 
     g_run = false;
@@ -156,7 +156,7 @@ void rkcif_control_exit(void)
     rkisp_close_device(ctx);
 }
 
-bool rkcif_control_run(void)
+bool camir_control_run(void)
 {
     return g_run;
 }

@@ -64,16 +64,16 @@ void register_get_test_callback(get_test_callback cb);
 
 typedef void (*display_callback)(void *ptr, int fd, int fmt, int w, int h, int rotation);
 
-void set_isp_param(int width, int height, display_callback cb, bool expo);
-void set_cif_param(int width, int height, display_callback cb);
+void set_rgb_param(int width, int height, display_callback cb, bool expo);
+void set_ir_param(int width, int height, display_callback cb);
 void set_usb_param(int width, int height, display_callback cb);
 void set_face_param(int width, int height, int cnt);
-void set_isp_display(display_callback cb);
-void set_cif_display(display_callback cb);
+void set_rgb_display(display_callback cb);
+void set_ir_display(display_callback cb);
 void set_usb_display(display_callback cb);
 
-void set_isp_rotation(int angle);
-void set_cif_rotation(int angle);
+void set_rgb_rotation(int angle);
+void set_ir_rotation(int angle);
 void set_usb_rotation(int angle);
 
 int rkfacial_init(void);

@@ -30,16 +30,16 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef __RKCIF_CONTROL_H__
-#define __RKCIF_CONTROL_H__
+#ifndef __CAMIR_CONTROL_H__
+#define __CAMIR_CONTROL_H__
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int rkcif_control_init(void);
-void rkcif_control_exit(void);
-bool rkcif_control_run(void);
+int camir_control_init(void);
+void camir_control_exit(void);
+bool camir_control_run(void);
 
 #ifdef __cplusplus
 }

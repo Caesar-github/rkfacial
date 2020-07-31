@@ -150,13 +150,13 @@ void display_commit(void *ptr, int fd, int fmt, int w, int h, int rotation)
 
 void display_switch(enum display_video_type type)
 {
-    set_isp_display(NULL);
-    set_cif_display(NULL);
+    set_rgb_display(NULL);
+    set_ir_display(NULL);
     set_usb_display(NULL);
     if (type == DISPLAY_VIDEO_RGB)
-        set_isp_display(display_commit);
+        set_rgb_display(display_commit);
     else if (type == DISPLAY_VIDEO_IR)
-        set_cif_display(display_commit);
+        set_ir_display(display_commit);
     else if (type == DISPLAY_VIDEO_USB)
         set_usb_display(display_commit);
 }

@@ -53,14 +53,14 @@ static const struct rkisp_api_buf *buf;
 static bool g_run;
 static pthread_t g_tid;
 
-bool g_isp_en;
-int g_isp_width;
-int g_isp_height;
+bool g_rgb_en;
+int g_rgb_width;
+int g_rgb_height;
 static display_callback g_display_cb = NULL;
 static pthread_mutex_t g_display_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_rotation = HAL_TRANSFORM_ROT_90;
 
-void set_isp_rotation(int angle)
+void set_rgb_rotation(int angle)
 {
     if (angle == 90)
         g_rotation = HAL_TRANSFORM_ROT_90;
@@ -68,23 +68,23 @@ void set_isp_rotation(int angle)
         g_rotation = HAL_TRANSFORM_ROT_270;
 }
 
-void set_isp_display(display_callback cb)
+void set_rgb_display(display_callback cb)
 {
     pthread_mutex_lock(&g_display_lock);
     g_display_cb = cb;
     pthread_mutex_unlock(&g_display_lock);
 }
 
-void set_isp_param(int width, int height, display_callback cb, bool expo)
+void set_rgb_param(int width, int height, display_callback cb, bool expo)
 {
-    g_isp_en = true;
-    g_isp_width = width;
-    g_isp_height = height;
-    set_isp_display(cb);
+    g_rgb_en = true;
+    g_rgb_width = width;
+    g_rgb_height = height;
+    set_rgb_display(cb);
     g_expo_weights_en = expo;
 }
 
-static inline void rkisp_inc_fps(void)
+static inline void camrgb_inc_fps(void)
 {
     static int fps = 0;
     static struct timeval t0;
@@ -108,7 +108,7 @@ static void *process(void *arg)
     do {
         id++;
 #if 0
-        rkisp_inc_fps();
+        camrgb_inc_fps();
 #endif
         buf = rkisp_get_frame(ctx, 0);
 
@@ -127,12 +127,12 @@ static void *process(void *arg)
     pthread_exit(NULL);
 }
 
-int rkisp_control_init(void)
+int camrgb_control_init(void)
 {
     int id = -1;
     char name[32];
 
-    if (!g_isp_en)
+    if (!g_rgb_en)
         return 0;
 
 #ifdef CAMERA_ENGINE_RKISP
@@ -156,7 +156,7 @@ int rkisp_control_init(void)
 
     rkisp_set_buf(ctx, 3, NULL, 0);
 
-    rkisp_set_fmt(ctx, g_isp_width, g_isp_height, V4L2_PIX_FMT_NV12);
+    rkisp_set_fmt(ctx, g_rgb_width, g_rgb_height, V4L2_PIX_FMT_NV12);
 
     if (rkisp_start_capture(ctx))
         return -1;
@@ -181,9 +181,9 @@ int rkisp_control_init(void)
     return 0;
 }
 
-void rkisp_control_exit(void)
+void camrgb_control_exit(void)
 {
-    if (!g_isp_en)
+    if (!g_rgb_en)
         return;
 
     g_run = false;
@@ -196,10 +196,10 @@ void rkisp_control_exit(void)
     rkisp_close_device(ctx);
 }
 
-static void rkisp_control_expo_weights_270(int left, int top, int right, int bottom)
+static void camrgb_control_expo_weights_270(int left, int top, int right, int bottom)
 {
 #ifdef CAMERA_ENGINE_RKISP
-    if (!g_isp_en)
+    if (!g_rgb_en)
         return;
 
     if (g_expo_weights_en) {
@@ -225,10 +225,10 @@ static void rkisp_control_expo_weights_270(int left, int top, int right, int bot
 #endif
 }
 
-static void rkisp_control_expo_weights_90(int left, int top, int right, int bottom)
+static void camrgb_control_expo_weights_90(int left, int top, int right, int bottom)
 {
 #ifdef CAMERA_ENGINE_RKISP
-    if (!g_isp_en)
+    if (!g_rgb_en)
         return;
 
     if (g_expo_weights_en) {
@@ -254,18 +254,18 @@ static void rkisp_control_expo_weights_90(int left, int top, int right, int bott
 #endif
 }
 
-void rkisp_control_expo_weights(int left, int top, int right, int bottom)
+void camrgb_control_expo_weights(int left, int top, int right, int bottom)
 {
     if (g_rotation == HAL_TRANSFORM_ROT_90)
-        rkisp_control_expo_weights_90(left, top, right, bottom);
+        camrgb_control_expo_weights_90(left, top, right, bottom);
     else if (g_rotation == HAL_TRANSFORM_ROT_270)
-        rkisp_control_expo_weights_270(left, top, right, bottom);
+        camrgb_control_expo_weights_270(left, top, right, bottom);
 }
 
-void rkisp_control_expo_weights_default(void)
+void camrgb_control_expo_weights_default(void)
 {
 #ifdef CAMERA_ENGINE_RKISP
-    if (!g_isp_en)
+    if (!g_rgb_en)
         return;
 
     if (g_expo_weights_en) {

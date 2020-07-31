@@ -30,17 +30,17 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef __RKISP_CONTROL_H__
-#define __RKISP_CONTROL_H__
+#ifndef __CAMRGB_CONTROL_H__
+#define __CAMRGB_CONTROL_H__
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int rkisp_control_init(void);
-void rkisp_control_exit(void);
-void rkisp_control_expo_weights(int left, int top, int right, int bottom);
-void rkisp_control_expo_weights_default(void);
+int camrgb_control_init(void);
+void camrgb_control_exit(void);
+void camrgb_control_expo_weights(int left, int top, int right, int bottom);
+void camrgb_control_expo_weights_default(void);
 
 #ifdef __cplusplus
 }

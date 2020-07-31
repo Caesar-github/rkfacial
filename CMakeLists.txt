@@ -7,8 +7,8 @@ set(SRC
     rockface_control.cpp
     load_feature.c
     play_wav.c
-    rkisp_control.c
-    rkcif_control.c
+    camrgb_control.c
+    camir_control.c
     rga_control.c
     video_common.c
     usb_camera.c

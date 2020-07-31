@@ -43,8 +43,8 @@
 #include "rockface_control.h"
 #include "load_feature.h"
 #include "play_wav.h"
-#include "rkisp_control.h"
-#include "rkcif_control.h"
+#include "camrgb_control.h"
+#include "camir_control.h"
 #include "video_common.h"
 #include "usb_camera.h"
 #include "db_monitor.h"
@@ -54,9 +54,9 @@ int rkfacial_init(void)
 {
     register_get_path_feature(rockface_control_get_path_feature);
 
-    rkisp_control_init();
+    camrgb_control_init();
 
-    rkcif_control_init();
+    camir_control_init();
 
     usb_camera_init();
 
@@ -72,9 +72,9 @@ int rkfacial_init(void)
 
 void rkfacial_exit(void)
 {
-    rkisp_control_exit();
+    camrgb_control_exit();
 
-    rkcif_control_exit();
+    camir_control_exit();
 
     usb_camera_exit();
 

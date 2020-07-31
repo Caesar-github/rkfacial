@@ -49,8 +49,8 @@
 #include "play_wav.h"
 #include "load_feature.h"
 #include "video_common.h"
-#include "rkisp_control.h"
-#include "rkcif_control.h"
+#include "camrgb_control.h"
+#include "camir_control.h"
 #include "snapshot.h"
 #include "db_monitor.h"
 #include "rkfacial.h"
@@ -454,11 +454,11 @@ static int rockface_control_detect(rockface_image_t *image, rockface_det_t *face
         bottom = face->box.bottom * g_ratio;
         if (rkfacial_paint_box_cb)
             rkfacial_paint_box_cb(left, top, right, bottom);
-        rkisp_control_expo_weights(left, top, right, bottom);
+        camrgb_control_expo_weights(left, top, right, bottom);
     } else {
         if (rkfacial_paint_box_cb)
             rkfacial_paint_box_cb(0, 0, 0, 0);
-        rkisp_control_expo_weights_default();
+        camrgb_control_expo_weights_default();
     }
 
     return ret;
@@ -971,7 +971,7 @@ static void *rockface_control_detect_thread(void *arg)
                 g_ir_detect_fail = 0;
                 g_ir_state = IR_STATE_PREPARED;
 #ifdef IR_TEST_DATA
-                if (!rkcif_control_run()) {
+                if (!camir_control_run()) {
                     rockface_control_convert_ir(g_test_bo.ptr, g_face_width, g_face_height,
                                                 RK_FORMAT_YCbCr_420_SP, 0);
                     g_ir_state = IR_STATE_CANCELED;

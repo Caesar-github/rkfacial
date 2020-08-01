@@ -116,6 +116,7 @@ static bool is_command_success(const char *cmd)
 static void db_monitor_check(void);
 static void *db_monitor_thread(void *arg)
 {
+    int ret;
     int id = -1;
     struct json_data *data = NULL;
 
@@ -163,8 +164,11 @@ static void *db_monitor_thread(void *arg)
             continue;
 
         if (data->add) {
-            if (rockface_control_add_web(data->id, data->path))
+            ret = rockface_control_add_web(data->id, data->path);
+            if (ret == -1 )
                 dbserver_face_load_complete(data->id, -1);
+            else if (ret == 2)
+                dbserver_face_load_complete(data->id, 2);
             else
                 dbserver_face_load_complete(data->id, 1);
             printf("Update: id = %d, path = %s\n", data->id, data->path);

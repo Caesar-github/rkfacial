@@ -68,6 +68,7 @@
 
 #define FACE_SIMILARITY_CONVERT(f) powf(2.0, -((f)))
 #define FACE_SIMILARITY_SCORE 1.0 /* suggest range 0.7 ~ 1.3, lower score means need higher similarity to recognize */
+#define FACE_SIMILARITY_SCORE_REGISTER 0.5
 #define FACE_SCORE_LANDMARK_IMAGE 0.5 /* range 0 - 1.0, higher score means higher expectation */
 #define FACE_SCORE_REGISTER 0.99 /* range 0 - 1.0, higher score means higher expectation */
 #define FACE_REGISTER_CNT 5
@@ -1337,7 +1338,22 @@ int rockface_control_add_web(int id, const char *name)
     printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
     rockface_feature_t f;
     if (!rockface_control_get_path_feature(name, &f)) {
-        database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
+        rockface_search_result_t result;
+        rockface_ret_t ret;
+        struct face_data face_data;
+        char result_name[NAME_LEN];
+        pthread_mutex_lock(&g_lib_lock);
+        ret = rockface_feature_search(face_handle, &f, FACE_SIMILARITY_SCORE_REGISTER, &result);
+        pthread_mutex_unlock(&g_lib_lock);
+        if (ret != ROCKFACE_RET_SUCCESS) {
+            database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
+        } else {
+            memset(result_name, 0, NAME_LEN);
+            memcpy(&face_data, result.feature, sizeof(struct face_data));
+            database_is_id_exist(face_data.id, result_name, NAME_LEN);
+            printf("%s is similar with %s, similarity is %f\n", name, result_name, result.similarity);
+            return 2;
+        }
     } else {
         printf("%s %s fail!\n", __func__, name);
         return -1;

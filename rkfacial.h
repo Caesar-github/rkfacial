@@ -96,6 +96,10 @@ typedef void (*rkfacial_paint_face_callback)(void *ptr, int fmt, int width, int 
 void register_rkfacial_paint_face(rkfacial_paint_face_callback cb);
 extern rkfacial_paint_face_callback rkfacial_paint_face_cb;
 
+typedef void (*get_face_config_region_callback)(int x, int y, int w, int h);
+void register_get_face_config_region(get_face_config_region_callback cb);
+extern get_face_config_region_callback get_face_config_region_cb;
+
 #ifdef __cplusplus
 }
 #endif

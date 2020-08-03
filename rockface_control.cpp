@@ -338,7 +338,7 @@ static rockface_det_t *get_max_face(rockface_det_array_t *face_array)
 
 static bool check_face_region(rockface_rect_t *box, int img_width, int img_height)
 {
-    int x, y, w, h;
+    int x, y, w, h, nw, nh;
 
     if (!get_face_config_corner_x(&x))
         x = 0;
@@ -348,6 +348,15 @@ static bool check_face_region(rockface_rect_t *box, int img_width, int img_heigh
         w = g_face_width;
     if (!get_face_config_det_height(&h))
         h = g_face_height;
+    if (!get_face_config_nor_width(&nw))
+        nw = g_face_width;
+    if (!get_face_config_nor_height(&nh))
+        nh = g_face_height;
+
+    x = x * g_face_width / nw;
+    y = y * g_face_height / nh;
+    w = w * g_face_width / nw;
+    h = h * g_face_height / nh;
 
     if (x + w > g_face_width)
         w = g_face_width - x;

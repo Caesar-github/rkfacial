@@ -78,6 +78,9 @@ static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_cond = PTHREAD_COND_INITIALIZER;
 static bool g_flag;
 
+extern int g_face_width;
+extern int g_face_height;
+
 static void db_monitor_wait(void)
 {
     pthread_mutex_lock(&g_mutex);
@@ -203,6 +206,8 @@ static void get_face_config(json_object *j_obj)
     g_face_config.corner_y = json_object_get_int(json_object_object_get(j_obj, "iLeftCornerY"));
     g_face_config.det_width = json_object_get_int(json_object_object_get(j_obj, "iDetectWidth"));
     g_face_config.det_height = json_object_get_int(json_object_object_get(j_obj, "iDetectHeight"));
+    g_face_config.nor_width = json_object_get_int(json_object_object_get(j_obj, "iNormalizedWidth"));
+    g_face_config.nor_height = json_object_get_int(json_object_object_get(j_obj, "iNormalizedHeight"));
     printf("face_config: en %d\n", g_face_config.en);
     printf("             volume %d\n", g_face_config.volume);
     printf("             live_det_en %d\n", g_face_config.live_det_en);
@@ -214,6 +219,16 @@ static void get_face_config(json_object *j_obj)
     printf("             corner_y %d\n", g_face_config.corner_y);
     printf("             det_width %d\n", g_face_config.det_width);
     printf("             det_height %d\n", g_face_config.det_height);
+    printf("             nor_width %d\n", g_face_config.nor_width);
+    printf("             nor_height %d\n", g_face_config.nor_height);
+    if (get_face_config_region_cb) {
+        int x, y, w, h;
+        x = g_face_config.corner_x * g_face_width / g_face_config.nor_width;
+        y = g_face_config.corner_y * g_face_height / g_face_config.nor_height;
+        w = g_face_config.det_width * g_face_width / g_face_config.nor_width;
+        h = g_face_config.det_height * g_face_height / g_face_config.nor_height;
+        get_face_config_region_cb(x, y, w, h);
+    }
 }
 
 void db_monitor_run(void *json_str)

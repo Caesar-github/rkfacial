@@ -110,3 +110,9 @@ void register_rkfacial_paint_face(rkfacial_paint_face_callback cb)
 {
     rkfacial_paint_face_cb = cb;
 }
+
+get_face_config_region_callback get_face_config_region_cb = NULL;
+void register_get_face_config_region(get_face_config_region_callback cb)
+{
+    get_face_config_region_cb = cb;
+}

@@ -50,10 +50,14 @@ struct face_config {
     int corner_y;
     int det_width;
     int det_height;
+    int nor_width;
+    int nor_height;
 };
 
 extern struct face_config g_face_config;
 
+bool get_face_config_nor_height(int *height);
+bool get_face_config_nor_width(int *width);
 bool get_face_config_det_height(int *height);
 bool get_face_config_det_width(int *width);
 bool get_face_config_corner_y(int *y);

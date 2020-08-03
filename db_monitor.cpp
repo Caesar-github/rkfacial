@@ -324,7 +324,7 @@ void db_monitor_storage_init(void)
         json_str = dbserver_get_storage_media_folder();
         if (json_str)
             break;
-        usleep(100000);
+        usleep(1000000);
     } while (1);
 
     json_object *j_config = json_tokener_parse(json_str);
@@ -376,14 +376,14 @@ static void db_monitor_get_media_path(int type, char *path, size_t size)
             json_object *j_status = json_object_object_get(j_config, "iStatus");
             status = json_object_get_int(j_status);
         } else {
-            usleep(100000);
+            usleep(1000000);
             continue;
         }
         if (status)
             break;
         json_object_put(j_config);
         g_free(json_str);
-        usleep(100000);
+        usleep(1000000);
     } while (1);
 
     json_object *j_array = json_object_object_get(j_config, "sScanPath");

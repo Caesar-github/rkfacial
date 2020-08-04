@@ -57,22 +57,40 @@ void snapshot_exit(struct snapshot *s)
     }
 }
 
-void face_convert(rockface_det_t *face, int *x, int *y, int *w, int *h, int width, int height)
+void face_convert(rockface_det_t face, int *x, int *y, int *w, int *h, int width, int height)
 {
-    *w = face->box.right - face->box.left;
-    *h = face->box.bottom - face->box.top;
+    int temp;
+
+    /* expand face region 50% */
+    temp = (face.box.right - face.box.left) / 4;
+    face.box.left -= temp;
+    face.box.right += temp;
+    temp = (face.box.bottom - face.box.top) / 4;
+    face.box.top -= temp;
+    face.box.bottom += temp;
+    if (face.box.left <= 0)
+        face.box.left = 0;
+    if (face.box.right >= width)
+        face.box.right = width;
+    if (face.box.top <= 0)
+        face.box.top = 0;
+    if (face.box.bottom >= height)
+        face.box.bottom = height;
+
+    *w = face.box.right - face.box.left;
+    *h = face.box.bottom - face.box.top;
     *w = SNAP_ALIGN(*w, 16);
     *h = SNAP_ALIGN(*h, 16);
 
-    if (face->box.left + (*w) >= width)
-        *x = face->box.right - (*w);
+    if (face.box.left + (*w) >= width)
+        *x = face.box.right - (*w);
     else
-        *x = face->box.left;
+        *x = face.box.left;
 
-    if (face->box.top + (*h) >= height)
-        *y = face->box.bottom - (*h);
+    if (face.box.top + (*h) >= height)
+        *y = face.box.bottom - (*h);
     else
-        *y = face->box.top;
+        *y = face.box.top;
 
     *x = SNAP_ALIGN(*x, 2);
     *y = SNAP_ALIGN(*y, 2);
@@ -123,7 +141,7 @@ int snapshot_run(struct snapshot *s, rockface_image_t *image, rockface_det_t *fa
     }
 
     if (face) {
-        face_convert(face, &x, &y, &w, &h, width, height);
+        face_convert(*face, &x, &y, &w, &h, width, height);
     } else {
         w = width;
         h = height;

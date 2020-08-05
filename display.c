@@ -160,3 +160,9 @@ void display_switch(enum display_video_type type)
     else if (type == DISPLAY_VIDEO_USB)
         set_usb_display(display_commit);
 }
+
+void display_get_resolution(int *width, int *height)
+{
+    *width = g_disp.width;
+    *height = g_disp.height;
+}

@@ -56,6 +56,7 @@
 #include <dbus_signal.h>
 
 #include "rockface_control.h"
+#include "display.h"
 
 #define DBSERVER  "rockchip.dbserver"
 #define DBSERVER_PATH      "/"
@@ -223,10 +224,16 @@ static void get_face_config(json_object *j_obj)
     printf("             nor_height %d\n", g_face_config.nor_height);
     if (get_face_config_region_cb) {
         int x, y, w, h;
-        x = g_face_config.corner_x * g_face_width / g_face_config.nor_width;
-        y = g_face_config.corner_y * g_face_height / g_face_config.nor_height;
-        w = g_face_config.det_width * g_face_width / g_face_config.nor_width;
-        h = g_face_config.det_height * g_face_height / g_face_config.nor_height;
+        int width, height;
+        display_get_resolution(&width, &height);
+        if (!width || !height) {
+            width = g_face_width;
+            height = g_face_height;
+        }
+        x = g_face_config.corner_x * width / g_face_config.nor_width;
+        y = g_face_config.corner_y * height / g_face_config.nor_height;
+        w = g_face_config.det_width * width / g_face_config.nor_width;
+        h = g_face_config.det_height * height / g_face_config.nor_height;
         get_face_config_region_cb(x, y, w, h);
     }
 }

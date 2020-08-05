@@ -54,6 +54,7 @@
 #include "snapshot.h"
 #include "db_monitor.h"
 #include "rkfacial.h"
+#include "display.h"
 
 #define TEST_RESULT_INC(x) \
     do { \
@@ -453,10 +454,16 @@ static int rockface_control_detect(rockface_image_t *image, rockface_det_t *face
     ret = _rockface_control_detect(image, face, en ? NULL : &g_rgb_track);
     if (face->score > get_face_detect_score()) {
         int left, top, right, bottom;
-        left = face->box.left * g_ratio;
-        top = face->box.top * g_ratio;
-        right = face->box.right * g_ratio;
-        bottom = face->box.bottom * g_ratio;
+        int width, height;
+        display_get_resolution(&width, &height);
+        if (!width || !height) {
+            width = g_face_width;
+            height = g_face_height;
+        }
+        left = face->box.left * g_ratio * width / g_face_width;
+        top = face->box.top * g_ratio * height / g_face_height;
+        right = face->box.right * g_ratio * width / g_face_width;
+        bottom = face->box.bottom * g_ratio * height / g_face_height;
         if (rkfacial_paint_box_cb)
             rkfacial_paint_box_cb(left, top, right, bottom);
         camrgb_control_expo_weights(left, top, right, bottom);

@@ -71,11 +71,11 @@ void face_convert(rockface_det_t face, int *x, int *y, int *w, int *h, int width
     if (face.box.left <= 0)
         face.box.left = 0;
     if (face.box.right >= width)
-        face.box.right = width;
+        face.box.right = width - 1;
     if (face.box.top <= 0)
         face.box.top = 0;
     if (face.box.bottom >= height)
-        face.box.bottom = height;
+        face.box.bottom = height - 1;
 
     *w = face.box.right - face.box.left;
     *h = face.box.bottom - face.box.top;

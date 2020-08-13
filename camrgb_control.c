@@ -137,18 +137,17 @@ int camrgb_control_init(void)
 
 #ifdef CAMERA_ENGINE_RKISP
     id = get_video_id("rkisp1_mainpath");
-#endif
-#ifdef CAMERA_ENGINE_RKAIQ
-    id = get_video_id("rkispp_scale0");
-#endif
     if (id < 0) {
         printf("%s: get video id fail!\n", __func__);
         return -1;
     }
-
     snprintf(name, sizeof(name), "/dev/video%d", id);
     printf("%s: %s\n", __func__, name);
     ctx = rkisp_open_device(name, 1);
+#endif
+#ifdef CAMERA_ENGINE_RKAIQ
+    ctx = rkisp_open_device2(CAM_TYPE_RKISP1);
+#endif
     if (ctx == NULL) {
         printf("%s: ctx is NULL\n", __func__);
         return -1;

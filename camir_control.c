@@ -110,6 +110,7 @@ int camir_control_init(void)
     if (!g_ir_en)
         return 0;
 
+#ifdef CAMERA_ENGINE_RKISP
     int id = get_video_id("stream_cif_dvp");
     if (id < 0) {
         printf("%s: get video id fail!\n", __func__);
@@ -119,6 +120,10 @@ int camir_control_init(void)
     snprintf(name, sizeof(name), "/dev/video%d", id);
     printf("%s: %s\n", __func__, name);
     ctx = rkisp_open_device(name, 0);
+#endif
+#ifdef CAMERA_ENGINE_RKAIQ
+    ctx = rkisp_open_device2(CAM_TYPE_RKCIF);
+#endif
     if (ctx == NULL) {
         printf("%s: ctx is NULL\n", __func__);
         return -1;

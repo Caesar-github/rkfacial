@@ -38,6 +38,8 @@
 #include <pthread.h>
 #include <sys/time.h>
 #include <getopt.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "face_common.h"
 #include "rockface_control.h"
@@ -50,9 +52,36 @@
 #include "db_monitor.h"
 #include "rkfacial.h"
 
+static int check_isp_server_status(int cam_id)
+{
+    int fd;
+    char status[32];
+    char pipe_name[128];
+    sprintf(pipe_name, "/tmp/.ispserver_cam%d", cam_id);
+
+    fd = open(pipe_name, O_RDONLY);
+    if (fd < 0)
+        return 0;
+    memset(status, 0, sizeof(status));
+    read(fd, status, sizeof(status) - 1);
+    close(fd);
+    return atoi(status);
+}
+
 int rkfacial_init(void)
 {
     register_get_path_feature(rockface_control_get_path_feature);
+
+#ifdef CAMERA_ENGINE_RKAIQ
+    while (check_isp_server_status(0) != 1) {
+        printf("%s: check isp server status\n", __func__);
+        usleep(10000);
+    }
+    while (check_isp_server_status(1) != 1) {
+        printf("%s: check isp server status\n", __func__);
+        usleep(10000);
+    }
+#endif
 
     camrgb_control_init();
 

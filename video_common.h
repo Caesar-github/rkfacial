@@ -52,6 +52,7 @@ extern char g_black_list[NAME_LEN];
 int get_video_id(char *name);
 int check_path_dir(const char *name);
 void save_file(void *buf, size_t size, const char *dir, const char *ext);
+bool is_command_success(const char *cmd);
 
 #ifdef __cplusplus
 }

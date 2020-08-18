@@ -116,3 +116,21 @@ void save_file(void *buf, size_t size, const char *dir, const char *ext)
         printf("save %s fail.\n", name);
     }
 }
+
+bool is_command_success(const char *cmd)
+{
+    char buffer[128];
+    FILE *fp;
+    int num;
+    bool result = false;
+
+    fp = popen(cmd, "r");
+    if (fp != NULL) {
+        num = fread(buffer, 1, sizeof(buffer), fp);
+        if (num > 0)
+            result = true;
+        pclose(fp);
+    }
+
+    return result;
+}

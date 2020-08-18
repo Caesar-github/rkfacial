@@ -73,6 +73,10 @@ int rkfacial_init(void)
     register_get_path_feature(rockface_control_get_path_feature);
 
 #ifdef CAMERA_ENGINE_RKAIQ
+    if (!is_command_success("pidof ispserver")) {
+        printf("ispserver is not running!\n");
+        return -1;
+    }
     while (check_isp_server_status(0) != 1) {
         printf("%s: check isp server status\n", __func__);
         usleep(10000);

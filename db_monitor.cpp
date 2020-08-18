@@ -99,24 +99,6 @@ static void db_monitor_signal(void)
     pthread_mutex_unlock(&g_mutex);
 }
 
-static bool is_command_success(const char *cmd)
-{
-    char buffer[128];
-    FILE *fp;
-    int num;
-    bool result = false;
-
-    fp = popen(cmd, "r");
-    if (fp != NULL) {
-        num = fread(buffer, 1, sizeof(buffer), fp);
-        if (num > 0)
-            result = true;
-        pclose(fp);
-    }
-
-    return result;
-}
-
 static void db_monitor_check(void);
 static void *db_monitor_thread(void *arg)
 {

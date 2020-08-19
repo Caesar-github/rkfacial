@@ -86,6 +86,10 @@
 #define DET_WIDTH 360
 #define DET_HEIGHT 640
 
+#define FACE_BLUR 0.8
+#define BRIGHT_UNDEREXPOSURE 60.0
+#define BRIGHT_OVEREXPOSURE 210.0
+
 struct face_buf {
     rockface_image_t img;
     rockface_det_t face;
@@ -504,7 +508,7 @@ static int rockface_control_get_feature(rockface_image_t *in_image,
     rockface_landmark_t landmark;
     TEST_RESULT_INC(rgb_landmark_total);
     ret = rockface_landmark5(face_handle, in_image, &(in_face->box), &landmark);
-    if (ret != ROCKFACE_RET_SUCCESS || landmark.score < score)
+    if (ret != ROCKFACE_RET_SUCCESS)
         return -1;
     TEST_RESULT_INC(rgb_landmark_ok);
 
@@ -515,6 +519,17 @@ static int rockface_control_get_feature(rockface_image_t *in_image,
     if (ret != ROCKFACE_RET_SUCCESS)
         return -1;
     TEST_RESULT_INC(rgb_align_ok);
+
+    float blur;
+    ret = rockface_blur(in_image, &blur);
+    if (ret != ROCKFACE_RET_SUCCESS || blur > FACE_BLUR)
+        return -1;
+
+    float bright_level;
+    ret = rockface_brightlevel(in_image, &bright_level);
+    if (ret != ROCKFACE_RET_SUCCESS || bright_level < BRIGHT_UNDEREXPOSURE ||
+            bright_level > BRIGHT_OVEREXPOSURE)
+        return -1;
 
     TEST_RESULT_INC(rgb_extract_total);
     ret = rockface_feature_extract(face_handle, &out_img, out_feature);

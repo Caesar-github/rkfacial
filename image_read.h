@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 Rockchip Electronics Co., Ltd.
+ * Copyright (C) 2020 Rockchip Electronics Co., Ltd.
  * author: Zhihua Wang, hogan.wang@rock-chips.com
  *
  * This software is available to you under a choice of one of two
@@ -30,37 +30,18 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#ifndef __VPU_DECODE_H__
-#define __VPU_DECODE_H__
-
-#include <memory.h>
-#include <stdint.h>
-#include <stdio.h>
-
-#include <rockchip/rk_mpi.h>
-
-#define MPP_ALIGN(x, a) (((x) + (a)-1) & ~((a)-1))
-
-struct vpu_decode {
-    int in_width;
-    int in_height;
-    int hor_stride;
-    int ver_stride;
-    RK_S32 pkt_size;
-    MppCtx mpp_ctx;
-    MppApi* mpi;
-    MppBufferGroup memGroup;
-    MppFrameFormat fmt;
-};
+#ifndef __IMAGE_READ_H__
+#define __IMAGE_READ_H__
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int vpu_decode_jpeg_init(struct vpu_decode* decode, int width, int height);
-int vpu_decode_jpeg_doing(struct vpu_decode* decode, void* in_data, RK_S32 in_size,
-                          int out_fd, void* out_data);
-int vpu_decode_jpeg_done(struct vpu_decode* decode);
+#include "rga_control.h"
+#include <rockface/rockface.h>
+
+int image_read(const char *path, rockface_image_t *img, bo_t *rgb_bo, int *rgb_fd);
+int image_read_deinit(bo_t *rgb_bo, int *rgb_fd);
 
 #ifdef __cplusplus
 }

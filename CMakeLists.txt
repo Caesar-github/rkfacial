@@ -22,6 +22,7 @@ set(SRC
     display.c
     face_config.c
     draw_rect.c
+    image_read.c
 )
 
 include_directories(${DRM_HEADER_DIR})

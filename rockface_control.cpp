@@ -55,6 +55,7 @@
 #include "db_monitor.h"
 #include "rkfacial.h"
 #include "display.h"
+#include "image_read.h"
 
 #define TEST_RESULT_INC(x) \
     do { \
@@ -560,14 +561,29 @@ int rockface_control_get_path_feature(const char *path, void *feature)
     rockface_image_t in_img;
     rockface_det_t face;
     int cnt = 10;
+    int read;
+    bo_t rgb_bo;
+    int rgb_fd;
 
     while (access(path, F_OK) && --cnt)
         usleep(100000);
-    if (rockface_image_read(path, &in_img, 1))
-        return -1;
+
+    /* try hardware decode */
+    read = image_read(path, &in_img, &rgb_bo, &rgb_fd);
+    if (read) {
+        if (read != -2)
+            image_read_deinit(&rgb_bo, &rgb_fd);
+
+        /* use software decode */
+        if (rockface_image_read(path, &in_img, 1))
+            return -1;
+    }
     if (!_rockface_control_detect(&in_img, &face, NULL))
         ret = rockface_control_get_feature(&in_img, out_feature, &face, true);
-    rockface_image_release(&in_img);
+    if (!read)
+        image_read_deinit(&rgb_bo, &rgb_fd);
+    else
+        rockface_image_release(&in_img);
     return ret;
 }
 

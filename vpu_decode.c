@@ -102,6 +102,8 @@ int vpu_decode_jpeg_doing(struct vpu_decode* decode, void* in_data, RK_S32 in_si
     RK_U32 height = decode->in_height;
     RK_U32 hor_stride = MPP_ALIGN(width, 16);
     RK_U32 ver_stride = MPP_ALIGN(height, 16);
+    decode->hor_stride = hor_stride;
+    decode->ver_stride = ver_stride;
     MppFrame frame = NULL;
     MppPacket packet = NULL;
     MppBuffer str_buf = NULL; /* input */
@@ -215,6 +217,8 @@ int vpu_decode_jpeg_doing(struct vpu_decode* decode, void* in_data, RK_S32 in_si
         task = NULL;
 
         if (err_info)
+            ret = MPP_NOK;
+        else if (MPP_FMT_YUV422SP != decode->fmt && MPP_FMT_YUV420SP != decode->fmt)
             ret = MPP_NOK;
     }
 

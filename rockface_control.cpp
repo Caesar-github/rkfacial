@@ -65,12 +65,10 @@
 #define DEFAULT_FACE_NUMBER 1000
 #define DEFAULT_FACE_PATH "/userdata"
 #define FACE_DETECT_SCORE 0.55 /* range 0 - 1.0, higher score means higher expectation */
-#define FACE_SCORE_LANDMARK_RUNNING 0.9 /* range 0 - 1.0, higher score means higher expectation */
 
 #define FACE_SIMILARITY_CONVERT(f) powf(2.0, -((f)))
 #define FACE_SIMILARITY_SCORE 1.0 /* suggest range 0.7 ~ 1.3, lower score means need higher similarity to recognize */
 #define FACE_SIMILARITY_SCORE_REGISTER 0.5
-#define FACE_SCORE_LANDMARK_IMAGE 0.5 /* range 0 - 1.0, higher score means higher expectation */
 #define FACE_SCORE_REGISTER 0.99 /* range 0 - 1.0, higher score means higher expectation */
 #define FACE_REGISTER_CNT 5
 #define FACE_REAL_SCORE 0.5 /* range 0 - 1.0, higher score means higher expectation */
@@ -86,9 +84,7 @@
 #define DET_WIDTH 360
 #define DET_HEIGHT 640
 
-#define FACE_BLUR 0.8
-#define BRIGHT_UNDEREXPOSURE 60.0
-#define BRIGHT_OVEREXPOSURE 210.0
+#define FACE_BLUR 0.85
 
 struct face_buf {
     rockface_image_t img;
@@ -397,8 +393,11 @@ static int _rockface_control_detect(rockface_image_t *image, rockface_det_t *out
 
     TEST_RESULT_INC(rgb_detect_total);
     ret = rockface_detect(face_handle, image, &face_array0);
-    if (ret != ROCKFACE_RET_SUCCESS)
+    if (ret != ROCKFACE_RET_SUCCESS) {
+        if (!track)
+            printf("rockface_detect fail!\n");
         return -1;
+    }
 
     if (track) {
         TEST_RESULT_INC(rgb_track_total);
@@ -411,11 +410,26 @@ static int _rockface_control_detect(rockface_image_t *image, rockface_det_t *out
     }
 
     rockface_det_t* face = get_max_face(&face_array);
-    if (face == NULL || face->score < get_face_detect_score())
+    if (face == NULL) {
+        if (!track)
+            printf("rockface_detect fail: face is NULL!\n");
         return -1;
+    }
+    if (face->score < get_face_detect_score()) {
+        if (!track)
+            printf("rockface_detect fail: face score %f, less than %f!\n", face->score, get_face_detect_score());
+        return -1;
+    }
+    rockface_rect_t *box = &face->box;
+    if (box->left < 0 || box->top < 0 || box->right >= image->width || box->bottom >= image->height) {
+        if (!track)
+            printf("rockface_detect fail: box [%d %d %d %d] error, image: %dx%d\n",
+                   box->left, box->top, box->right, box->bottom, image->width, image->height);
+        return -1;
+    }
 
     if (track) {
-        if (face->box.right - face->box.left < get_min_pixel(image->width))
+        if (face->box.right - face->box.left <= get_min_pixel(image->width))
             return -1;
         if (!check_face_region(&face->box, image->width, image->height))
             return -1;
@@ -501,41 +515,47 @@ static void rockface_control_release_library(void)
 static int rockface_control_get_feature(rockface_image_t *in_image,
                                         rockface_feature_t *out_feature,
                                         rockface_det_t *in_face,
-                                        float score)
+                                        bool reg)
 {
     rockface_ret_t ret;
 
     rockface_landmark_t landmark;
     TEST_RESULT_INC(rgb_landmark_total);
     ret = rockface_landmark5(face_handle, in_image, &(in_face->box), &landmark);
-    if (ret != ROCKFACE_RET_SUCCESS)
+    if (ret != ROCKFACE_RET_SUCCESS) {
+        if (reg)
+            printf("rockface_landmark5 fail!\n");
         return -1;
+    }
     TEST_RESULT_INC(rgb_landmark_ok);
 
     rockface_image_t out_img;
     memset(&out_img, 0, sizeof(rockface_image_t));
     TEST_RESULT_INC(rgb_align_total);
     ret = rockface_align(face_handle, in_image, &(in_face->box), &landmark, &out_img);
-    if (ret != ROCKFACE_RET_SUCCESS)
+    if (ret != ROCKFACE_RET_SUCCESS) {
+        if (reg)
+            printf("rockface_align fail!\n");
         return -1;
+    }
     TEST_RESULT_INC(rgb_align_ok);
 
     float blur;
-    ret = rockface_blur(in_image, &blur);
-    if (ret != ROCKFACE_RET_SUCCESS || blur > FACE_BLUR)
+    ret = rockface_blur(&out_img, &blur);
+    if (ret != ROCKFACE_RET_SUCCESS || blur > FACE_BLUR) {
+        if (reg)
+            printf("rockface_blur fail, blur = %f\n", blur);
         return -1;
-
-    float bright_level;
-    ret = rockface_brightlevel(in_image, &bright_level);
-    if (ret != ROCKFACE_RET_SUCCESS || bright_level < BRIGHT_UNDEREXPOSURE ||
-            bright_level > BRIGHT_OVEREXPOSURE)
-        return -1;
+    }
 
     TEST_RESULT_INC(rgb_extract_total);
     ret = rockface_feature_extract(face_handle, &out_img, out_feature);
     rockface_image_release(&out_img);
-    if (ret != ROCKFACE_RET_SUCCESS)
+    if (ret != ROCKFACE_RET_SUCCESS) {
+        if (reg)
+            printf("rockface_feature_extract fail!\n");
         return -1;
+    }
     TEST_RESULT_INC(rgb_extract_ok);
 
     return 0;
@@ -554,7 +574,7 @@ int rockface_control_get_path_feature(const char *path, void *feature)
     if (rockface_image_read(path, &in_img, 1))
         return -1;
     if (!_rockface_control_detect(&in_img, &face, NULL))
-        ret = rockface_control_get_feature(&in_img, out_feature, &face, FACE_SCORE_LANDMARK_IMAGE);
+        ret = rockface_control_get_feature(&in_img, out_feature, &face, true);
     rockface_image_release(&in_img);
     return ret;
 }
@@ -567,7 +587,7 @@ static bool rockface_control_search(rockface_image_t *image, void *data, int *in
     rockface_search_result_t result;
     rockface_feature_t feature;
 
-    if (rockface_control_get_feature(image, &feature, face, FACE_SCORE_LANDMARK_RUNNING) == 0) {
+    if (rockface_control_get_feature(image, &feature, face, false) == 0) {
         //printf("g_total_cnt = %d\n", ++g_total_cnt);
         pthread_mutex_lock(&g_lib_lock);
         TEST_RESULT_INC(rgb_search_total);
@@ -818,7 +838,7 @@ static bool rockface_control_detect_ir(void *ptr, int width, int height, RgaSURF
 
     rockface_det_t* face = get_max_face(&face_array);
     if (face == NULL || face->score < get_face_detect_score() ||
-        face->box.right - face->box.left < get_min_pixel(ir_det_img.width))
+        face->box.right - face->box.left <= get_min_pixel(ir_det_img.width))
         return false;
 
     if (!check_face_region(&face->box, ir_det_img.width, ir_det_img.height))

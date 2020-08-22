@@ -50,6 +50,7 @@ int rockface_control_convert_feature(void *ptr, int width, int height, RgaSURF_F
 void rockface_control_set_delete(void);
 void rockface_control_set_register(void);
 int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation);
+void rockface_control_delete_all(void);
 int rockface_control_delete(int id, const char *pname, bool notify);
 int rockface_control_add_ui(int id, const char *name, void *feature);
 int rockface_control_add_web(int id, const char *name);

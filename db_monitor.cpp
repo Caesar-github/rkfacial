@@ -286,17 +286,25 @@ void db_monitor_run(void *json_str)
             data->add = false;
             json_object *j_path = json_object_object_get(j_key, "sPicturePath");
             const char *path = json_object_get_string(j_path);
-            if (path) {
+            if (!j_id && !j_path) {
+                printf("Delete all!\n");
+                rockface_control_delete_all();
+                free(data);
+            } else if (path) {
                 data->path = strdup(path);
-                if (!data->path)
+                if (data->path) {
+                    pthread_mutex_lock(&g_lock);
+                    g_json.push_back(data);
+                    pthread_mutex_unlock(&g_lock);
+                    db_monitor_signal();
+                } else {
                     printf("strdup %d path fail!\n", id);
+                    free(data);
+                }
             } else {
                 printf("get %d path fail!\n", id);
+                free(data);
             }
-            pthread_mutex_lock(&g_lock);
-            g_json.push_back(data);
-            pthread_mutex_unlock(&g_lock);
-            db_monitor_signal();
         } else {
             printf("%s: Delete fail: %d\n", __func__, id);
         }

@@ -41,6 +41,7 @@ extern "C" {
 void database_bak(void);
 int database_init(void);
 void database_exit(void);
+void database_reset(void);
 int database_insert(void *data, size_t size, const char *name, size_t n_size, int id, bool sync_flag);
 int database_record_count(void);
 int database_get_data(void *dst, const int cnt, size_t d_size, size_t d_off,

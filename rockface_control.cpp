@@ -1336,6 +1336,12 @@ void rockface_control_database(void)
     pthread_mutex_unlock(&g_lib_lock);
 }
 
+void rockface_control_delete_all(void)
+{
+    database_reset();
+    rockface_control_database();
+}
+
 int rockface_control_delete(int id, const char *pname, bool notify)
 {
     char name[NAME_LEN];

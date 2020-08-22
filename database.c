@@ -81,6 +81,15 @@ void database_exit(void)
     database_bak();
 }
 
+void database_reset(void)
+{
+    pthread_mutex_lock(&g_mutex);
+    database_exit();
+    unlink(DATABASE_PATH);
+    database_init();
+    pthread_mutex_unlock(&g_mutex);
+}
+
 int database_insert(void *data, size_t size, const char *name, size_t n_size, int id, bool sync_flag)
 {
     char cmd[256];

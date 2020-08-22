@@ -1373,6 +1373,7 @@ int rockface_control_add_ui(int id, const char *name, void *feature)
 
 int rockface_control_add_web(int id, const char *name)
 {
+    rockface_control_delete(id, NULL, false);
     printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
     rockface_feature_t f;
     if (!rockface_control_get_path_feature(name, &f)) {

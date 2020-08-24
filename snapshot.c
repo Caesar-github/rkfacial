@@ -142,6 +142,8 @@ int snapshot_run(struct snapshot *s, rockface_image_t *image, rockface_det_t *fa
 
     if (face) {
         face_convert(*face, &x, &y, &w, &h, width, height);
+        if (!w || !h)
+            return -1;
     } else {
         w = width;
         h = height;

@@ -159,7 +159,7 @@ static void *db_monitor_thread(void *arg)
                 dbserver_face_load_complete(data->id, 1);
             printf("Update: id = %d, path = %s\n", data->id, data->path);
         } else {
-            rockface_control_delete(data->id, data->path, false);
+            rockface_control_delete(data->id, data->path, false, true);
             printf("Delete: id = %d\n", data->id);
         }
 

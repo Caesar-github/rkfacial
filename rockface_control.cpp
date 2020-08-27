@@ -1100,7 +1100,7 @@ static void *rockface_control_feature_thread(void *arg)
         }
         gettimeofday(&t1, NULL);
         if (g_delete && del_timeout && result) {
-            rockface_control_delete(result->id, NULL, true);
+            rockface_control_delete(result->id, NULL, true, true);
             del_timeout = 0;
             g_delete = false;
             play_wav_signal(DELETE_SUCCESS_WAV);
@@ -1362,7 +1362,7 @@ void rockface_control_delete_all(void)
     rockface_control_database();
 }
 
-int rockface_control_delete(int id, const char *pname, bool notify)
+int rockface_control_delete(int id, const char *pname, bool notify, bool del)
 {
     char name[NAME_LEN];
 
@@ -1374,7 +1374,7 @@ int rockface_control_delete(int id, const char *pname, bool notify)
 
     printf("delete %d from %s\n", id, DATABASE_PATH);
     database_delete(id, true);
-    if (strlen(name))
+    if (del && strlen(name))
         unlink(name);
     if (notify)
         db_monitor_face_list_delete(id);
@@ -1399,7 +1399,7 @@ int rockface_control_add_ui(int id, const char *name, void *feature)
 
 int rockface_control_add_web(int id, const char *name)
 {
-    rockface_control_delete(id, NULL, false);
+    rockface_control_delete(id, NULL, false, false);
     printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
     rockface_feature_t f;
     if (!rockface_control_get_path_feature(name, &f)) {

@@ -541,7 +541,7 @@ static int rockface_control_get_feature(rockface_image_t *in_image,
     TEST_RESULT_INC(rgb_align_ok);
 
     float blur;
-    ret = rockface_blur(&out_img, &blur);
+    ret = rockface_blur(in_image, &(in_face->box), &blur);
     if (ret != ROCKFACE_RET_SUCCESS || blur > FACE_BLUR) {
         if (reg)
             printf("rockface_blur fail, blur = %f\n", blur);

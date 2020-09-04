@@ -42,8 +42,7 @@ int vpu_encode_jpeg_init(struct vpu_encode* encode,
         MppFrameFormat format)
 {
     MPP_RET ret = MPP_OK;
-    MppEncPrepCfg prep_cfg;
-    MppEncCodecCfg codec_cfg;
+    MppEncCfg cfg;
     MppCodingType type = MPP_VIDEO_CodingMJPEG;
     MppFrameFormat fmt = format;
     memset(encode, 0, sizeof(*encode));
@@ -58,6 +57,7 @@ int vpu_encode_jpeg_init(struct vpu_encode* encode,
         return -1;
     }
 
+    MppApi* mpi = encode->mpi;
     MppCtx mpp_ctx = encode->mpp_ctx;
     ret = mpp_init(mpp_ctx, MPP_CTX_ENC, type);
     if (MPP_OK != ret) {
@@ -65,32 +65,30 @@ int vpu_encode_jpeg_init(struct vpu_encode* encode,
         return -1;
     }
 
-    memset(&prep_cfg, 0, sizeof(prep_cfg));
-    prep_cfg.change =
-        MPP_ENC_PREP_CFG_CHANGE_INPUT | MPP_ENC_PREP_CFG_CHANGE_FORMAT;
-    prep_cfg.width = width;
-    prep_cfg.height = height;
-    prep_cfg.hor_stride = width;
-    prep_cfg.ver_stride = height;
-    prep_cfg.format = fmt;
-
-    MppApi* mpi = encode->mpi;
-    ret = mpi->control(mpp_ctx, MPP_ENC_SET_PREP_CFG, &prep_cfg);
-    if (MPP_OK != ret) {
-        printf("mpi control enc set cfg failed\n");
+    ret = mpp_enc_cfg_init(&cfg);
+    if (ret || !cfg) {
+        printf("mpp_enc_cfg_init failed ret %d\n", ret);
         return -1;
     }
 
-    memset(&codec_cfg, 0, sizeof(codec_cfg));
-    codec_cfg.coding = type;
-    codec_cfg.jpeg.change = MPP_ENC_JPEG_CFG_CHANGE_QP;
-    codec_cfg.jpeg.quant = quant; /* range 0 - 10, worst -> best */
+    mpp_enc_cfg_set_s32(cfg, "prep:width", width);
+    mpp_enc_cfg_set_s32(cfg, "prep:height", height);
+    mpp_enc_cfg_set_s32(cfg, "prep:hor_stride", width);
+    mpp_enc_cfg_set_s32(cfg, "prep:ver_stride", height);
+    mpp_enc_cfg_set_s32(cfg, "prep:format", fmt);
 
-    ret = mpi->control(mpp_ctx, MPP_ENC_SET_CODEC_CFG, &codec_cfg);
+    mpp_enc_cfg_set_s32(cfg, "rc:mode", MPP_ENC_RC_MODE_FIXQP);
+
+    mpp_enc_cfg_set_s32(cfg, "jpeg:quant", quant); /* range 0 - 10, worst -> best */
+
+    ret = mpi->control(mpp_ctx, MPP_ENC_SET_CFG, cfg);
     if (ret) {
-        printf("mpi control enc set codec cfg failed ret %d\n", ret);
+        printf("mpi control MPP_ENC_SET_CFG failed ret %d\n", ret);
+        mpp_enc_cfg_deinit(cfg);
         return -1;
     }
+
+    mpp_enc_cfg_deinit(cfg);
 
     return 0;
 }

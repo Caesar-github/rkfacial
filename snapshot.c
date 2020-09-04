@@ -82,6 +82,11 @@ void face_convert(rockface_det_t face, int *x, int *y, int *w, int *h, int width
     *w = SNAP_ALIGN(*w, 16);
     *h = SNAP_ALIGN(*h, 16);
 
+    if (*w > width)
+        *w = width;
+    if (*h > height)
+        *h = height;
+
     if (face.box.left + (*w) >= width)
         *x = face.box.right - (*w);
     else
@@ -94,6 +99,11 @@ void face_convert(rockface_det_t face, int *x, int *y, int *w, int *h, int width
 
     *x = SNAP_ALIGN(*x, 2);
     *y = SNAP_ALIGN(*y, 2);
+
+    if (*x < 0)
+        *x = 0;
+    if (*y < 0)
+        *y = 0;
 }
 
 int snapshot_run(struct snapshot *s, rockface_image_t *image, rockface_det_t *face,

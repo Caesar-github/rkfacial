@@ -45,7 +45,7 @@ int rga_control_buffer_init(bo_t *bo, int *buf_fd, int width, int height, int bp
         return ret;
     }
 
-    ret = c_RkRgaGetAllocBuffer(bo, width, height, bpp);
+    ret = c_RkRgaGetAllocBufferCache(bo, width, height, bpp);
     if (ret) {
         printf("c_RkRgaGetAllocBuffer error : %s\n", strerror(errno));
         return ret;

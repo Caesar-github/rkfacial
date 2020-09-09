@@ -130,8 +130,9 @@ int camir_control_init(void)
     }
 
     rkisp_set_buf(ctx, 3, NULL, 0);
-
+#ifdef CAMERA_ENGINE_RKISP
     rkisp_set_sensor_fmt(ctx, 1280, 720, MEDIA_BUS_FMT_YUYV8_2X8);
+#endif
     rkisp_set_fmt(ctx, 1280, 720, V4L2_PIX_FMT_NV12);
 
     if (rkisp_start_capture(ctx))

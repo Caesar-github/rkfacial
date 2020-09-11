@@ -987,6 +987,7 @@ static void *rockface_control_detect_thread(void *arg)
         if (det) {
             if (det == -1)
                 memset(last_name, 0, sizeof(last_name));
+            g_feature.id = 0;
             continue;
         }
 

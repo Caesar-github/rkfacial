@@ -1425,9 +1425,9 @@ int rockface_control_add_web(int id, const char *name)
 int rockface_control_add_local(const char *name)
 {
     int id = database_get_user_name_id();
-    if (id < 0) {
+    if (id < 0 || id >= g_face_cnt) {
         printf("%s: get id fail!\n", __func__);
-        return -1;
+        return -3;
     }
     printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
     rockface_feature_t f;
@@ -1441,8 +1441,24 @@ int rockface_control_add_local(const char *name)
             memcpy(tmp, begin + 1, end - begin - 1);
         else
             strcpy(tmp, "unknown_user");
-        database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
-        db_monitor_face_list_add(id, (char*)name, tmp, type);
+
+        rockface_search_result_t result;
+        rockface_ret_t ret;
+        struct face_data face_data;
+        char result_name[NAME_LEN];
+        pthread_mutex_lock(&g_lib_lock);
+        ret = rockface_feature_search(face_handle, &f, FACE_SIMILARITY_SCORE_REGISTER, &result);
+        pthread_mutex_unlock(&g_lib_lock);
+        if (ret != ROCKFACE_RET_SUCCESS) {
+            database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
+            db_monitor_face_list_add(id, (char*)name, tmp, type);
+        } else {
+            memset(result_name, 0, NAME_LEN);
+            memcpy(&face_data, result.feature, sizeof(struct face_data));
+            database_is_id_exist(face_data.id, result_name, NAME_LEN);
+            printf("%s is similar with %s, similarity is %f\n", name, result_name, result.similarity);
+            return -2;
+        }
     } else {
         printf("%s %s fail!\n", __func__, name);
         return -1;
@@ -1450,5 +1466,5 @@ int rockface_control_add_local(const char *name)
 
     rockface_control_database();
 
-    return 0;
+    return id;
 }

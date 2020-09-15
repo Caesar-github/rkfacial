@@ -52,47 +52,16 @@
 #include "db_monitor.h"
 #include "rkfacial.h"
 
-#define RGB_CAM_ID 1
-#define IR_CAM_ID 0
-
-static int check_isp_server_status(int cam_id)
-{
-    int fd;
-    int st = 0;
-    char status[32];
-    char pipe_name[128];
-    sprintf(pipe_name, "/tmp/.ispserver_cam%d", cam_id);
-
-    for (int i = 0; i < 10; i++) {
-        fd = open(pipe_name, O_RDONLY);
-        if (fd >= 0) {
-            memset(status, 0, sizeof(status));
-            read(fd, status, sizeof(status) - 1);
-            close(fd);
-            st = atoi(status);
-        }
-        if (st == 1)
-            break;
-        else
-            usleep(100000);
-    }
-    if (st != 1)
-        printf("%s: %s fail\n", __func__, pipe_name);
-    return st;
-}
+extern int aiq_control_alloc(void);
+extern void aiq_control_free(void);
 
 int rkfacial_init(void)
 {
-    register_get_path_feature(rockface_control_get_path_feature);
-
 #ifdef CAMERA_ENGINE_RKAIQ
-    if (!is_command_success("pidof ispserver")) {
-        printf("ispserver is not running!\n");
-        return -1;
-    }
-    check_isp_server_status(RGB_CAM_ID);
-    check_isp_server_status(IR_CAM_ID);
+    aiq_control_alloc();
 #endif
+
+    register_get_path_feature(rockface_control_get_path_feature);
 
     camrgb_control_init();
 
@@ -121,6 +90,10 @@ void rkfacial_exit(void)
     rockface_control_exit();
 
     play_wav_thread_exit();
+
+#ifdef CAMERA_ENGINE_RKAIQ
+    aiq_control_free();
+#endif
 }
 
 void rkfacial_delete(void)

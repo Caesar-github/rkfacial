@@ -86,7 +86,6 @@ static void *process(void *arg)
 
     do {
         buf = rkisp_get_frame(ctx, 0);
-        memset((char *)buf->buf + ctx->height * ctx->width, 128, ctx->height * ctx->width / 2);
 
         rockface_control_convert_ir(buf->buf, ctx->width, ctx->height,
                                     RK_FORMAT_YCbCr_420_SP, g_rotation);

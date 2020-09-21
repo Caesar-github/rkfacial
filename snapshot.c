@@ -40,9 +40,9 @@ int snapshot_init(struct snapshot *s, int w, int h)
     if (s->size)
         return 0;
 
-    if (rga_control_buffer_init(&s->nv12_bo, &s->nv12_fd, w, h, 12))
+    if (rga_control_buffer_init_nocache(&s->nv12_bo, &s->nv12_fd, w, h, 12))
         return -1;
-    if (rga_control_buffer_init(&s->enc_bo, &s->enc_fd, w, h, 12))
+    if (rga_control_buffer_init_nocache(&s->enc_bo, &s->enc_fd, w, h, 12))
         return -1;
     s->size = w * h * 3 / 2;
 

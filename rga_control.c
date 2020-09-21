@@ -35,7 +35,7 @@
 
 extern int c_RkRgaFree(bo_t *bo_info);
 
-int rga_control_buffer_init(bo_t *bo, int *buf_fd, int width, int height, int bpp)
+int _rga_control_buffer_init(bo_t *bo, int *buf_fd, int width, int height, int bpp, int cache)
 {
     int ret;
 
@@ -45,7 +45,10 @@ int rga_control_buffer_init(bo_t *bo, int *buf_fd, int width, int height, int bp
         return ret;
     }
 
-    ret = c_RkRgaGetAllocBufferCache(bo, width, height, bpp);
+    if (cache)
+        ret = c_RkRgaGetAllocBufferCache(bo, width, height, bpp);
+    else
+        ret = c_RkRgaGetAllocBuffer(bo, width, height, bpp);
     if (ret) {
         printf("c_RkRgaGetAllocBuffer error : %s\n", strerror(errno));
         return ret;
@@ -64,6 +67,16 @@ int rga_control_buffer_init(bo_t *bo, int *buf_fd, int width, int height, int bp
     }
 
     return 0;
+}
+
+int rga_control_buffer_init(bo_t *bo, int *buf_fd, int width, int height, int bpp)
+{
+    _rga_control_buffer_init(bo, buf_fd, width, height, bpp, 1);
+}
+
+int rga_control_buffer_init_nocache(bo_t *bo, int *buf_fd, int width, int height, int bpp)
+{
+    _rga_control_buffer_init(bo, buf_fd, width, height, bpp, 0);
 }
 
 void rga_control_buffer_deinit(bo_t *bo, int buf_fd)

@@ -40,6 +40,7 @@ extern "C" {
 #include <rga/RgaApi.h>
 
 int rga_control_buffer_init(bo_t *bo, int *buf_fd, int width, int height, int bpp);
+int rga_control_buffer_init_nocache(bo_t *bo, int *buf_fd, int width, int height, int bpp);
 void rga_control_buffer_deinit(bo_t *bo, int buf_fd);
 
 #ifdef __cplusplus

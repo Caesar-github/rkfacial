@@ -87,6 +87,8 @@
 
 #define FACE_BLUR 0.85
 
+#define DET_INTERVAL_TIME 1
+
 struct face_buf {
     rockface_image_t img;
     rockface_det_t face;
@@ -100,6 +102,9 @@ static struct face_buf g_detect[DET_BUFFER_NUM];
 static pthread_mutex_t g_det_lock = PTHREAD_MUTEX_INITIALIZER;
 static std::list<struct face_buf*> g_det_free;
 static std::list<struct face_buf*> g_det_ready;
+
+static struct timeval g_last_det_tv;
+static struct timeval g_last_reg_tv;
 
 static void *g_face_data = NULL;
 static int g_face_index = 0;
@@ -387,6 +392,15 @@ static int _rockface_control_detect(rockface_image_t *image, rockface_det_t *out
     rockface_ret_t ret;
     rockface_det_array_t face_array0;
     rockface_det_array_t face_array;
+
+    if (track) {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        if (tv.tv_sec - g_last_reg_tv.tv_sec <= DET_INTERVAL_TIME &&
+                tv.tv_sec - g_last_det_tv.tv_sec <= DET_INTERVAL_TIME)
+            return -1;
+        gettimeofday(&g_last_det_tv, NULL);
+    }
 
     memset(&face_array0, 0, sizeof(rockface_det_array_t));
     memset(&face_array, 0, sizeof(rockface_det_array_t));
@@ -1410,6 +1424,7 @@ int rockface_control_add_web(int id, const char *name)
 {
     rockface_control_delete(id, NULL, false, false);
     printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
+    gettimeofday(&g_last_reg_tv, NULL);
     rockface_feature_t f;
     if (!rockface_control_get_path_feature(name, &f)) {
         rockface_search_result_t result;
@@ -1446,6 +1461,7 @@ int rockface_control_add_local(const char *name)
         return -3;
     }
     printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
+    gettimeofday(&g_last_reg_tv, NULL);
     rockface_feature_t f;
     if (!rockface_control_get_path_feature(name, &f)) {
         char type[] = "whiteList";

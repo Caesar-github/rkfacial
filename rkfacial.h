@@ -8,6 +8,11 @@ extern "C" {
 #include <stdbool.h>
 #include <rockface/rockface.h>
 
+enum aiq_control_type {
+    AIQ_CONTROL_RGB,
+    AIQ_CONTROL_IR,
+};
+
 enum user_state {
     USER_STATE_FAKE,
     USER_STATE_REAL_UNREGISTERED,

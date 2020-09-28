@@ -53,19 +53,35 @@
 #include "rkfacial.h"
 
 extern int aiq_control_alloc(void);
-extern void aiq_control_free(void);
+extern bool aiq_control_get_status(enum aiq_control_type type);
 
 int rkfacial_init(void)
 {
-#ifdef CAMERA_ENGINE_RKAIQ
-    aiq_control_alloc();
-#endif
-
     register_get_path_feature(rockface_control_get_path_feature);
 
+#ifdef CAMERA_ENGINE_RKAIQ
+    aiq_control_alloc();
+    for (int i = 0; i < 10; i++) {
+        if (aiq_control_get_status(AIQ_CONTROL_RGB)) {
+            printf("%s: RGB aiq status ok.\n", __func__);
+            camrgb_control_init();
+            break;
+        }
+        sleep(1);
+    }
+    for (int i = 0; i < 10; i++) {
+        if (aiq_control_get_status(AIQ_CONTROL_IR)) {
+            printf("%s: IR aiq status ok.\n", __func__);
+            camir_control_init();
+            break;
+        }
+        sleep(1);
+    }
+#else
     camrgb_control_init();
-
     camir_control_init();
+#endif
+
 
     usb_camera_init();
 
@@ -90,10 +106,6 @@ void rkfacial_exit(void)
     rockface_control_exit();
 
     play_wav_thread_exit();
-
-#ifdef CAMERA_ENGINE_RKAIQ
-    aiq_control_free();
-#endif
 }
 
 void rkfacial_delete(void)

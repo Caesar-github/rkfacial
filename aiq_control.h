@@ -37,17 +37,13 @@
 extern "C" {
 #endif
 
+#include "rkfacial.h"
 #include <rk_aiq_user_api_sysctl.h>
 #include <rk_aiq_user_api_imgproc.h>
 
-enum aiq_control_type {
-    AIQ_CONTROL_RGB,
-    AIQ_CONTROL_IR,
-};
-
 int aiq_control_alloc(void);
-void aiq_control_free(void);
 void aiq_control_setExpGainRange(enum aiq_control_type type, paRange_t range);
+bool aiq_control_get_status(enum aiq_control_type type);
 
 #ifdef __cplusplus
 }

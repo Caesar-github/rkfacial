@@ -36,6 +36,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <linux/videodev2.h>
+#include <sys/ioctl.h>
 
 #include <list>
 
@@ -44,47 +46,61 @@
 #include <mediactl/v4l2subdev.h>
 
 #define IQFILES_PATH "/etc/iqfiles"
+#define AIQ_FILE_PATH_LEN 64
 #define AIQ_WIDTH 2688
 #define AIQ_HEIGHT 1520
 #define IR_SENSOR_MEDIA_MODEL   "rkcif_mipi_lvds"
 #define RGB_SENSOR_MEDIA_MODEL  "rkisp0"
+#define RGB_ISPP_MEDIA_MODEL  "rkispp0"
+#define IR_ISPP_MEDIA_MODEL "rkispp1"
+
+#define CLEAR(x) memset(&(x), 0, sizeof(x))
+
+/* Private v4l2 event */
+#define CIFISP_V4L2_EVENT_STREAM_START (V4L2_EVENT_PRIVATE_START + 1)
+#define CIFISP_V4L2_EVENT_STREAM_STOP (V4L2_EVENT_PRIVATE_START + 2)
 
 struct aiq_control {
+    rk_aiq_working_mode_t mode;
     rk_aiq_sys_ctx_t *ctx;
     aiq_control_type type;
+    char sensor[AIQ_FILE_PATH_LEN];
+    char ispp[AIQ_FILE_PATH_LEN];
+    bool ok;
 };
 
 static std::list<struct aiq_control *> g_aiq;
 
-rk_aiq_sys_ctx_t *aiq_control_init(int width, int height, rk_aiq_working_mode_t mode, const char *sensor_entity_name)
+static int xioctl(int fh, int request, void *arg)
 {
-    rk_aiq_sys_ctx_t *ctx;
+    int r;
 
-    ctx = rk_aiq_uapi_sysctl_init(sensor_entity_name, IQFILES_PATH, NULL, NULL);
-    if (!ctx) {
-        printf("%s: rk_aiq_uapi_sysctl_init fail!\n", __func__);
-        return NULL;
-    }
-    rk_aiq_uapi_sysctl_setMulCamConc(ctx, true);
-    if (rk_aiq_uapi_sysctl_prepare(ctx, width, height, mode)) {
-        printf("%s: rk_aiq_uapi_sysctl_prepare fail!\n", __func__);
-        rk_aiq_uapi_sysctl_deinit(ctx);
-        return NULL;
-    }
-    if (rk_aiq_uapi_sysctl_start(ctx) < 0) {
-        printf("%s: rk_aiq_uapi_sysctl_start fail!\n", __func__);
-        rk_aiq_uapi_sysctl_deinit(ctx);
-        return NULL;
-    }
-    return ctx;
+    do {
+        r = ioctl(fh, request, arg);
+    } while (-1 == r && EINTR == errno);
+
+    return r;
 }
 
-void aiq_control_deinit(rk_aiq_sys_ctx_t *ctx)
+static int get_devname(struct media_device *device, const char *name, char *dev_name)
 {
-    if (ctx) {
-        rk_aiq_uapi_sysctl_stop(ctx);
-        rk_aiq_uapi_sysctl_deinit(ctx);
-    }
+    const char *devname;
+    struct media_entity *entity = NULL;
+
+    entity = media_get_entity_by_name(device, name, strlen(name));
+    if (!entity)
+        return -1;
+
+    devname = media_entity_get_devname(entity);
+
+    if (!devname)
+        return -1;
+
+    strncpy(dev_name, devname, AIQ_FILE_PATH_LEN);
+
+    printf("get %s devname: %s\n", name, dev_name);
+
+    return 0;
 }
 
 static int enumrate_modules(struct media_device *device, char *name, size_t size)
@@ -132,9 +148,9 @@ static int enumrate_modules(struct media_device *device, char *name, size_t size
     return 0;
 }
 
-static int aiq_control_get_sensor_entity_name(aiq_control_type type, char *name, size_t size)
+static int aiq_control_get_sensor_entity_name(aiq_control_type type, char *name, size_t size, char *ispp)
 {
-    char mdev_path[64];
+    char mdev_path[AIQ_FILE_PATH_LEN];
     int ret = -1;
     struct media_device *device = NULL;
 
@@ -157,11 +173,12 @@ static int aiq_control_get_sensor_entity_name(aiq_control_type type, char *name,
 
         const struct media_device_info *info = media_get_info(device);
         if (AIQ_CONTROL_IR == type && !strcmp(info->model, IR_SENSOR_MEDIA_MODEL) ||
-                AIQ_CONTROL_RGB == type && !strcmp(info->model, RGB_SENSOR_MEDIA_MODEL)) {
+                AIQ_CONTROL_RGB == type && !strcmp(info->model, RGB_SENSOR_MEDIA_MODEL))
             ret = enumrate_modules(device, name, size);
-            media_device_unref(device);
-            break;
-        }
+
+        if (AIQ_CONTROL_IR == type && !strcmp(info->model, IR_ISPP_MEDIA_MODEL) ||
+                AIQ_CONTROL_RGB == type && !strcmp(info->model, RGB_ISPP_MEDIA_MODEL))
+            get_devname(device, "rkispp_input_params", ispp);
 
         media_device_unref(device);
     }
@@ -169,26 +186,117 @@ static int aiq_control_get_sensor_entity_name(aiq_control_type type, char *name,
     return ret;
 }
 
+static int wait_stream_event(int fd, unsigned int event_type, int time_out_ms)
+{
+    int ret;
+    struct v4l2_event event;
+
+    CLEAR(event);
+
+    do {
+        /*
+         * xioctl instead of poll.
+         * Since poll() cannot wait for input before stream on,
+         * it will return an error directly. So, use ioctl to
+         * dequeue event and block until sucess.
+         */
+        ret = xioctl(fd, VIDIOC_DQEVENT, &event);
+        if (ret == 0 && event.type == event_type) {
+            return 0;
+        }
+    } while (true);
+
+    return -1;
+}
+
+static int subscrible_stream_event(char *ispp, int fd, bool subs) {
+    struct v4l2_event_subscription sub;
+    int ret = 0;
+
+    CLEAR(sub);
+    sub.type = CIFISP_V4L2_EVENT_STREAM_START;
+    ret = xioctl(fd, subs ? VIDIOC_SUBSCRIBE_EVENT : VIDIOC_UNSUBSCRIBE_EVENT, &sub);
+    if (ret) {
+        printf("can't subscribe %s start event!\n", ispp);
+        exit(EXIT_FAILURE);
+    }
+
+    CLEAR(sub);
+    sub.type = CIFISP_V4L2_EVENT_STREAM_STOP;
+    ret = xioctl(fd, subs ? VIDIOC_SUBSCRIBE_EVENT : VIDIOC_UNSUBSCRIBE_EVENT, &sub);
+    if (ret) {
+        printf("can't subscribe %s stop event!\n", ispp);
+    }
+
+    printf("subscribe events from %s success !\n", ispp);
+
+    return 0;
+}
+
+static void *aiq_thread(void *arg)
+{
+    struct aiq_control *aiq = (struct aiq_control *)arg;
+
+    while (1) {
+        int isp_fd = open(aiq->ispp, O_RDWR);
+        if (isp_fd < 0) {
+            printf("open %s failed %s\n", aiq->ispp, strerror(errno));
+            pthread_exit(NULL);
+        }
+        subscrible_stream_event(aiq->ispp, isp_fd, true);
+
+        rk_aiq_sys_ctx_t *ctx = rk_aiq_uapi_sysctl_init(aiq->sensor, IQFILES_PATH, NULL, NULL);
+        if (!ctx) {
+            printf("%s: rk_aiq_uapi_sysctl_init fail!\n", __func__);
+            pthread_exit(NULL);
+        }
+        rk_aiq_uapi_sysctl_setMulCamConc(ctx, true);
+        if (rk_aiq_uapi_sysctl_prepare(ctx, AIQ_WIDTH, AIQ_HEIGHT, aiq->mode)) {
+            printf("%s: rk_aiq_uapi_sysctl_prepare fail!\n", __func__);
+            rk_aiq_uapi_sysctl_deinit(ctx);
+            pthread_exit(NULL);
+        }
+        aiq->ok = true;
+        wait_stream_event(isp_fd, CIFISP_V4L2_EVENT_STREAM_START, -1);
+        aiq->ctx = ctx;
+        if (rk_aiq_uapi_sysctl_start(ctx) < 0) {
+            printf("%s: rk_aiq_uapi_sysctl_start fail!\n", __func__);
+            rk_aiq_uapi_sysctl_deinit(ctx);
+            pthread_exit(NULL);
+        }
+        wait_stream_event(isp_fd, CIFISP_V4L2_EVENT_STREAM_STOP, -1);
+        aiq->ctx = NULL;
+        aiq->ok = false;
+        rk_aiq_uapi_sysctl_stop(ctx);
+        rk_aiq_uapi_sysctl_deinit(ctx);
+        subscrible_stream_event(aiq->ispp, isp_fd, false);
+        close(isp_fd);
+    }
+    pthread_detach(pthread_self());
+    pthread_exit(NULL);
+}
+
 static void aiq_alloc(aiq_control_type type)
 {
-    char name[64];
-    if (!aiq_control_get_sensor_entity_name(type, name, sizeof(name))) {
-        rk_aiq_working_mode_t mode;
-        if (type == AIQ_CONTROL_RGB)
-            mode = RK_AIQ_WORKING_MODE_ISP_HDR2;
-        else
-            mode = RK_AIQ_WORKING_MODE_NORMAL;
-        rk_aiq_sys_ctx_t *ctx = aiq_control_init(AIQ_WIDTH, AIQ_HEIGHT, mode, name);
-        if (ctx) {
-            struct aiq_control *aiq = (struct aiq_control *)calloc(1, sizeof(struct aiq_control));
-            if (!aiq) {
-                printf("%s alloc fail!\n", __func__);
-                return;
-            }
-            aiq->type = type;
-            aiq->ctx = ctx;
-            g_aiq.push_back(aiq);
+    char name[AIQ_FILE_PATH_LEN] = "";
+    char ispp[AIQ_FILE_PATH_LEN] = "";
+    if (!aiq_control_get_sensor_entity_name(type, name, sizeof(name), ispp) && strlen(ispp)) {
+        struct aiq_control *aiq = (struct aiq_control *)calloc(1, sizeof(struct aiq_control));
+        if (!aiq) {
+            printf("%s alloc fail!\n", __func__);
+            return;
         }
+        if (type == AIQ_CONTROL_RGB)
+            aiq->mode = RK_AIQ_WORKING_MODE_ISP_HDR2;
+        else
+            aiq->mode = RK_AIQ_WORKING_MODE_NORMAL;
+        aiq->type = type;
+        strncpy(aiq->ispp, ispp, sizeof(aiq->ispp));
+        strncpy(aiq->sensor, name, sizeof(aiq->sensor));
+        g_aiq.push_back(aiq);
+        pthread_t tid;
+        if (pthread_create(&tid, NULL, aiq_thread, aiq))
+            printf("create aiq_thread fail!\n");
     }
 }
 
@@ -197,16 +305,6 @@ int aiq_control_alloc(void)
     aiq_alloc(AIQ_CONTROL_RGB);
     aiq_alloc(AIQ_CONTROL_IR);
     return 0;
-}
-
-void aiq_control_free(void)
-{
-    while (!g_aiq.empty()) {
-        struct aiq_control *aiq = g_aiq.front();
-        g_aiq.pop_front();
-        aiq_control_deinit(aiq->ctx);
-        free(aiq);
-    }
 }
 
 void aiq_control_setExpGainRange(enum aiq_control_type type, paRange_t range)
@@ -218,4 +316,16 @@ void aiq_control_setExpGainRange(enum aiq_control_type type, paRange_t range)
             break;
         }
     }
+}
+
+bool aiq_control_get_status(enum aiq_control_type type)
+{
+    bool ok = false;
+    for (auto &aiq : g_aiq) {
+        if (aiq->type == type) {
+            ok = aiq->ok;
+            break;
+        }
+    }
+    return ok;
 }

@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <pthread.h>
 
 #include <rga/RgaApi.h>
 #include "display.h"
@@ -51,8 +52,17 @@ struct display {
     struct drm_buf buf[BUF_COUNT];
     int buf_cnt;
     int rga_fmt;
+
+    /* face rect */
+    int x;
+    int y;
+    int w;
+    int h;
+
+    YUV_Color color;
 };
 
+static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 struct display g_disp;
 
 static int drm_display_init(struct display *disp)
@@ -89,6 +99,7 @@ int display_init(int width, int height)
     g_disp.height = height;
     g_disp.plane_type = DRM_PLANE_TYPE_OVERLAY;
     g_disp.buf_cnt = BUF_COUNT;
+    g_disp.color = set_yuv_color(COLOR_R);
     ret = drm_display_init(&g_disp);
     if (ret)
         return ret;
@@ -134,6 +145,12 @@ void drm_commit(struct display *disp, int num, void *ptr, int fd, int fmt, int w
         return;
     }
 
+    pthread_mutex_lock(&g_lock);
+    YUV_Rect rect = {g_disp.x, g_disp.y, g_disp.w, g_disp.h};
+    YUV_Color color = g_disp.color;
+    pthread_mutex_unlock(&g_lock);
+    if (rect.x || rect.y || rect.width || rect.height)
+        yuv420_draw_rectangle(map, dst_w, dst_h, rect, color);
     ret = drmCommit(&disp->buf[num], disp->width, disp->height, 0, 0, &disp->dev, disp->plane_type);
     if (ret) {
         fprintf(stderr, "display commit error, ret = %d\n", ret);
@@ -165,4 +182,21 @@ void display_get_resolution(int *width, int *height)
 {
     *width = g_disp.width;
     *height = g_disp.height;
+}
+
+void display_paint_box(int left, int top, int right, int bottom)
+{
+    pthread_mutex_lock(&g_lock);
+    g_disp.x = left;
+    g_disp.y = top;
+    g_disp.w = right - left;
+    g_disp.h = bottom - top;
+    pthread_mutex_unlock(&g_lock);
+}
+
+void display_set_color(YUV_Color color)
+{
+    pthread_mutex_lock(&g_lock);
+    g_disp.color = color;
+    pthread_mutex_unlock(&g_lock);
 }

@@ -21,6 +21,7 @@ set(SRC
     rkdrm_display.c
     display.c
     face_config.c
+    draw_rect.c
 )
 
 include_directories(${DRM_HEADER_DIR})
@@ -67,6 +68,6 @@ add_library(rkfacial SHARED ${SRC})
 target_link_libraries(rkfacial ${LIB})
 
 install(TARGETS rkfacial DESTINATION lib)
-install(FILES rkfacial.h rga_control.h turbojpeg_decode.h display.h DESTINATION include/rkfacial)
+install(FILES rkfacial.h rga_control.h turbojpeg_decode.h display.h draw_rect.h DESTINATION include/rkfacial)
 
 install(DIRECTORY wav/cn/ DESTINATION ../etc)

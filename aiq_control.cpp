@@ -267,7 +267,7 @@ static void *aiq_thread(void *arg)
         wait_stream_event(isp_fd, CIFISP_V4L2_EVENT_STREAM_STOP, -1);
         aiq->ctx = NULL;
         aiq->ok = false;
-        rk_aiq_uapi_sysctl_stop(ctx);
+        rk_aiq_uapi_sysctl_stop(ctx, false);
         rk_aiq_uapi_sysctl_deinit(ctx);
         subscrible_stream_event(aiq->ispp, isp_fd, false);
         close(isp_fd);

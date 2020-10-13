@@ -59,6 +59,9 @@ int rkfacial_init(void)
 {
     register_get_path_feature(rockface_control_get_path_feature);
 
+    if (c_RkRgaInit())
+        printf("%s: rga init fail!\n", __func__);
+
 #ifdef CAMERA_ENGINE_RKAIQ
     aiq_control_alloc();
     for (int i = 0; i < 10; i++) {

@@ -393,6 +393,7 @@ drmModeConnectorPtr drmFoundConn(int fd, drmModeResPtr res)
             continue;
         if (c->connector_type == DRM_MODE_CONNECTOR_DSI ||
             c->connector_type == DRM_MODE_CONNECTOR_eDP ||
+            c->connector_type == DRM_MODE_CONNECTOR_DPI ||
             c->connector_type == DRM_MODE_CONNECTOR_LVDS) {
             connector = c;
             break;

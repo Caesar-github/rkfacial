@@ -184,6 +184,7 @@ static void get_face_config(json_object *j_obj)
     g_face_config.live_det_th = json_object_get_int(json_object_object_get(j_obj, "iLiveDetectThreshold"));
     g_face_config.face_det_th = json_object_get_int(json_object_object_get(j_obj, "iFaceDetectionThreshold"));
     g_face_config.face_rec_th = json_object_get_int(json_object_object_get(j_obj, "iFaceRecognitionThreshold"));
+    g_face_config.face_mask_th = 50; // TODO
     g_face_config.min_pixel = json_object_get_int(json_object_object_get(j_obj, "iFaceMinPixel"));
     g_face_config.corner_x = json_object_get_int(json_object_object_get(j_obj, "iLeftCornerX"));
     g_face_config.corner_y = json_object_get_int(json_object_object_get(j_obj, "iLeftCornerY"));

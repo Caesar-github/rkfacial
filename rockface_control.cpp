@@ -67,6 +67,7 @@
 #define DEFAULT_FACE_PATH "/userdata"
 #define FACE_DETECT_SCORE 0.55 /* range 0 - 1.0, higher score means higher expectation */
 
+#define FACE_MASK_SIMILARITY_SCORE 1.05 /* suggest range 1.05 ~ 1.12, lower score means need higher similarity to recognize */
 #define FACE_SIMILARITY_CONVERT(f) powf(2.0, -((f)))
 #define FACE_SIMILARITY_SCORE 1.0 /* suggest range 0.7 ~ 1.3, lower score means need higher similarity to recognize */
 #define FACE_SIMILARITY_SCORE_REGISTER 0.5
@@ -109,6 +110,10 @@ static struct timeval g_last_reg_tv;
 static void *g_face_data = NULL;
 static int g_face_index = 0;
 static int g_face_cnt = DEFAULT_FACE_NUMBER;
+#ifdef FACE_MASK
+static void *g_mask_data = NULL;
+static int g_mask_index = 0;
+#endif
 
 static rockface_handle_t face_handle;
 static int g_total_cnt;
@@ -165,6 +170,22 @@ static bo_t g_test_bo;
 static int g_test_fd;
 #endif
 
+static int g_detect_en = 1;
+
+void rockface_control_set_detect_en(int en)
+{
+    if (en) {
+        sync();
+        database_bak();
+        rockface_control_database();
+        system("echo ondemand > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor");
+    } else {
+        /* register feature use max freq */
+        system("echo userspace > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor");
+        system("echo 1512000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_setspeed");
+    }
+    g_detect_en = en;
+}
 
 void rockface_start_test(void)
 {
@@ -293,6 +314,20 @@ static float get_face_recognition_score(void)
         score = log(100.0 / (th * 1.0)) / log(2);
     } else {
         score = FACE_SIMILARITY_SCORE;
+    }
+    return score;
+}
+
+static float get_face_mask_recognition_score(void)
+{
+    int th;
+    float score;
+    if (get_face_config_face_mask_th(&th)) {
+        th = th < 1 ? 1 : th;
+        th = th > 100 ? 100 : th;
+        score = log(100.0 / (th * 1.0)) / log(2);
+    } else {
+        score = FACE_MASK_SIMILARITY_SCORE;
     }
     return score;
 }
@@ -509,11 +544,11 @@ static int rockface_control_detect(rockface_image_t *image, rockface_det_t *face
     return ret;
 }
 
-static int rockface_control_init_library(void *data, int num, size_t size, size_t off)
+static int rockface_control_init_library(void *data, int num, size_t size, size_t off, int mask)
 {
     rockface_ret_t ret;
 
-    ret = rockface_face_library_init(face_handle, data, num, size, off);
+    ret = rockface_face_library_init2(face_handle, mask ? ROCKFACE_RECOG_MASK : ROCKFACE_RECOG_NORMAL, data, num, size, off);
     if (ret != ROCKFACE_RET_SUCCESS) {
         printf("%s: int library error %d!\n", __func__, ret);
         return -1;
@@ -529,10 +564,15 @@ static void rockface_control_release_library(void)
 
 static int rockface_control_get_feature(rockface_image_t *in_image,
                                         rockface_feature_t *out_feature,
+                                        rockface_feature_float_t *mask_feature,
                                         rockface_det_t *in_face,
-                                        bool reg)
+                                        bool reg,
+                                        float *mask_score)
 {
     rockface_ret_t ret;
+
+    memset(out_feature, 0, sizeof(rockface_feature_t));
+    memset(mask_feature, 0, sizeof(rockface_feature_float_t));
 
     rockface_landmark_t landmark;
     TEST_RESULT_INC(rgb_landmark_total);
@@ -544,34 +584,69 @@ static int rockface_control_get_feature(rockface_image_t *in_image,
     }
     TEST_RESULT_INC(rgb_landmark_ok);
 
-    rockface_image_t out_img;
-    memset(&out_img, 0, sizeof(rockface_image_t));
-    TEST_RESULT_INC(rgb_align_total);
-    ret = rockface_align(face_handle, in_image, &(in_face->box), &landmark, &out_img);
-    if (ret != ROCKFACE_RET_SUCCESS) {
-        if (reg)
-            printf("rockface_align fail!\n");
+    rockface_landmark_t landmark106;
+    rockface_angle_t angle;
+    ret = rockface_landmark106(face_handle, in_image, &(in_face->box),  &landmark, &landmark106, &angle);
+    if (ret != ROCKFACE_RET_SUCCESS || angle.pitch > 30.0 || angle.pitch < -30.0 ||
+            angle.yaw > 30.0 || angle.yaw < -30.0 || angle.roll > 30.0 || angle.roll < -30.0)
         return -1;
-    }
-    TEST_RESULT_INC(rgb_align_ok);
 
-    TEST_RESULT_INC(rgb_extract_total);
-    ret = rockface_feature_extract(face_handle, &out_img, out_feature);
-    rockface_image_release(&out_img);
-    if (ret != ROCKFACE_RET_SUCCESS) {
-        if (reg)
-            printf("rockface_feature_extract fail!\n");
-        return -1;
+#ifdef FACE_MASK
+    if (reg) {
+        *mask_score = 0.0;
+    } else {
+        ret = rockface_mask_classifier(face_handle, in_image, &(in_face->box), mask_score);
+        if (ret != ROCKFACE_RET_SUCCESS) {
+            printf("rockface_mask_classifier error");
+            return -1;
+        }
     }
-    TEST_RESULT_INC(rgb_extract_ok);
+#else
+    *mask_score = 0.0;
+#endif
+
+    if (reg || *mask_score < 0.5) {
+        rockface_image_t out_img;
+        memset(&out_img, 0, sizeof(rockface_image_t));
+        TEST_RESULT_INC(rgb_align_total);
+        ret = rockface_align(face_handle, in_image, &(in_face->box), &landmark, &out_img);
+        if (ret != ROCKFACE_RET_SUCCESS) {
+            if (reg)
+                printf("rockface_align fail!\n");
+            return -1;
+        }
+        TEST_RESULT_INC(rgb_align_ok);
+
+        TEST_RESULT_INC(rgb_extract_total);
+        ret = rockface_feature_extract(face_handle, &out_img, out_feature);
+        rockface_image_release(&out_img);
+        if (ret != ROCKFACE_RET_SUCCESS) {
+            if (reg)
+                printf("rockface_feature_extract fail!\n");
+            return -1;
+        }
+        TEST_RESULT_INC(rgb_extract_ok);
+    }
+
+#ifdef FACE_MASK
+    if (reg || *mask_score >= 0.5) {
+        ret = rockface_mask_feature_extract(face_handle, in_image, &in_face->box, reg ? 0 : 1, mask_feature);
+        if (ret != ROCKFACE_RET_SUCCESS) {
+            if (reg)
+                printf("rockface_mask_feature_extract fail!\n");
+            return -1;
+        }
+    }
+#endif
 
     return 0;
 }
 
-int rockface_control_get_path_feature(const char *path, void *feature)
+int rockface_control_get_path_feature(const char *path, void *feature, void *mask_feature, float *mask_score)
 {
     int ret = -1;
     rockface_feature_t *out_feature = (rockface_feature_t*)feature;
+    rockface_feature_float_t *out_mask = (rockface_feature_float_t*)mask_feature;
     rockface_image_t in_img;
     rockface_det_t face;
     int cnt = 10;
@@ -593,7 +668,7 @@ int rockface_control_get_path_feature(const char *path, void *feature)
             return -1;
     }
     if (!_rockface_control_detect(&in_img, &face, NULL))
-        ret = rockface_control_get_feature(&in_img, out_feature, &face, true);
+        ret = rockface_control_get_feature(&in_img, out_feature, out_mask, &face, true, mask_score);
     if (!read)
         image_read_deinit(&rgb_bo, &rgb_fd);
     else
@@ -603,21 +678,28 @@ int rockface_control_get_path_feature(const char *path, void *feature)
 
 static bool rockface_control_search(rockface_image_t *image, void *data, int *index, int cnt,
                               size_t size, size_t offset, rockface_det_t *face, int reg,
-                              struct face_data* face_data, float *similarity)
+                              struct face_data **face_data, struct mask_data **mask_data, float *similarity)
 {
     rockface_ret_t ret;
     rockface_search_result_t result;
     rockface_feature_t feature;
+    rockface_feature_float_t mask;
+    float mask_score;
 
-    if (rockface_control_get_feature(image, &feature, face, false) == 0) {
+    if (rockface_control_get_feature(image, &feature, &mask, face, false, &mask_score) == 0) {
         //printf("g_total_cnt = %d\n", ++g_total_cnt);
         pthread_mutex_lock(&g_lib_lock);
         TEST_RESULT_INC(rgb_search_total);
-        ret = rockface_feature_search(face_handle, &feature, get_face_recognition_score(), &result);
+        ret = rockface_feature_search(face_handle,
+                mask_score < 0.5 ? &feature : (rockface_feature_t *)&mask,
+                mask_score < 0.5 ? get_face_recognition_score() : get_face_mask_recognition_score(), &result);
         if (ret == ROCKFACE_RET_SUCCESS) {
             TEST_RESULT_INC(rgb_search_ok);
             *similarity = result.similarity;
-            memcpy(face_data, result.feature, sizeof(struct face_data));
+            if (mask_score < 0.5)
+                *face_data = (struct face_data *)result.face_data;
+            else
+                *mask_data = (struct mask_data *)result.face_data;
             pthread_mutex_unlock(&g_lib_lock);
             if (g_register && ++g_register_cnt > FACE_REGISTER_CNT) {
                 g_register = false;
@@ -641,7 +723,10 @@ static bool rockface_control_search(rockface_image_t *image, void *data, int *in
                 printf("save %s success\n", name);
 #endif
 
-            rockface_control_add_ui(id, name, &feature);
+            if (mask_score < 0.5)
+                rockface_control_add_ui(id, name, &feature, NULL);
+            else
+                rockface_control_add_ui(id, name, NULL, &mask);
 
             g_register = false;
             g_register_cnt = 0;
@@ -725,7 +810,7 @@ int rockface_control_convert_detect(void *ptr, int width, int height, RgaSURF_FO
     rga_info_t src, dst;
     struct face_buf *buf;
 
-    if (!g_run)
+    if (!g_run || !g_detect_en)
         return -1;
 
     pthread_mutex_lock(&g_det_lock);
@@ -901,7 +986,7 @@ int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT
     int ret = -1;
     rga_info_t src, dst;
 
-    if (!g_run)
+    if (!g_run || !g_detect_en)
         return ret;
 
     if (g_ir_state != IR_STATE_PREPARED)
@@ -955,10 +1040,12 @@ int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT
 
         if (g_ir_save_real)
             save_ir(IR_REAL_PATH);
-    } else if (rkfacial_paint_info_cb) {
-        struct user_info info;
-        rockface_set_user_info(&info, USER_STATE_FAKE, &g_ir_face, &g_feature.face);
-        rkfacial_paint_info_cb(&info, false);
+    } else {
+        if (rkfacial_paint_info_cb) {
+            struct user_info info;
+            rockface_set_user_info(&info, USER_STATE_FAKE, &g_ir_face, &g_feature.face);
+            rkfacial_paint_info_cb(&info, false);
+        }
 
         if (g_ir_save_fake)
             save_ir(IR_FAKE_PATH);
@@ -1061,8 +1148,8 @@ static void *rockface_control_detect_thread(void *arg)
 static void *rockface_control_feature_thread(void *arg)
 {
     int index;
-    struct face_data result_data;
     struct face_data *result;
+    struct mask_data *mask;
     rockface_det_t face;
     struct timeval t0, t1;
     int del_timeout = 0;
@@ -1071,6 +1158,8 @@ static void *rockface_control_feature_thread(void *arg)
     char result_name[NAME_LEN];
     int timeout;
     float similar;
+    int id;
+    char has_mask;
 
     while (g_run) {
         pthread_mutex_lock(&g_mutex);
@@ -1113,17 +1202,24 @@ static void *rockface_control_feature_thread(void *arg)
             continue;
         memcpy(&face, &g_feature.face, sizeof(face));
         gettimeofday(&t0, NULL);
+        result = NULL;
+        mask = NULL;
         ret = (struct face_data*)rockface_control_search(&g_feature.img, g_face_data, &g_face_index,
-                        g_face_cnt, sizeof(struct face_data), 0, &face, reg_timeout, &result_data,
+                        g_face_cnt, sizeof(struct face_data), 0, &face, reg_timeout, &result, &mask,
                         &similar);
-        if (ret) {
-            result = &result_data;
+        if (result) {
+            id = result->id;
+            has_mask = 0;
+        } else if (mask) {
+            id = mask->id;
+            has_mask = 1;
         } else {
-            result = NULL;
+            id = -1;
+            has_mask = 0;
         }
         gettimeofday(&t1, NULL);
-        if (g_delete && del_timeout && result) {
-            rockface_control_delete(result->id, NULL, true, true);
+        if (g_delete && del_timeout && id >= 0) {
+            rockface_control_delete(id, NULL, true, true);
             del_timeout = 0;
             g_delete = false;
             play_wav_signal(DELETE_SUCCESS_WAV);
@@ -1132,8 +1228,8 @@ static void *rockface_control_feature_thread(void *arg)
                 rockface_set_user_info(&info, USER_STATE_REAL_UNREGISTERED, &g_ir_face, &g_feature.face);
                 rkfacial_paint_info_cb(&info, true);
             }
-        } else if (result && face.score > get_face_detect_score()) {
-            if (database_is_id_exist(result->id, result_name, NAME_LEN)) {
+        } else if (id >= 0 && face.score > get_face_detect_score()) {
+            if (database_is_id_exist(id, result_name, NAME_LEN)) {
                 if (!g_register && memcmp(last_name, result_name, sizeof(last_name))) {
                     char status[64];
                     char similarity[64];
@@ -1154,7 +1250,7 @@ static void *rockface_control_feature_thread(void *arg)
 #ifdef USE_WEB_SERVER
                     memset(g_snap.name, 0, sizeof(g_snap.name));
                     if (!snapshot_run(&g_snap, &g_feature.img, &face, RK_FORMAT_RGB_888, 0, mark))
-                        db_monitor_control_record_set(result->id, g_snap.name,
+                        db_monitor_control_record_set(id, g_snap.name,
                                 status, similarity);
 #endif
                 }
@@ -1164,8 +1260,9 @@ static void *rockface_control_feature_thread(void *arg)
                     if (strstr(result_name, "black_list"))
                         state = USER_STATE_REAL_REGISTERED_BLACK;
                     rockface_set_user_info(&info, state, &g_ir_face, &g_feature.face);
+                    info.has_mask = has_mask;
                     strncpy(info.sPicturePath, result_name, sizeof(info.sPicturePath) - 1);
-                    db_monitor_get_user_info(&info, result->id);
+                    db_monitor_get_user_info(&info, id);
                     strncpy(info.snap_path, g_snap.name, sizeof(info.snap_path) - 1);
                     rkfacial_paint_info_cb(&info, true);
                 }
@@ -1243,11 +1340,31 @@ int rockface_control_init(void)
         return -1;
     }
 
+    ret = rockface_init_landmark(face_handle, 106);
+    if (ret != ROCKFACE_RET_SUCCESS) {
+        printf("%s: init landmark106 error %d!\n", __func__, ret);
+        return -1;
+    }
+
     ret = rockface_init_liveness_detector(face_handle);
     if (ret != ROCKFACE_RET_SUCCESS) {
         printf("%s: init liveness detector error %d!\n", __func__, ret);
         return -1;
     }
+
+#ifdef FACE_MASK
+    ret = rockface_init_mask_recognizer(face_handle);
+    if (ret != ROCKFACE_RET_SUCCESS) {
+        printf("%s: init mask recognizer error %d!\n", __func__, ret);
+        return -1;
+    }
+
+    ret = rockface_init_mask_classifier(face_handle);
+    if (ret != ROCKFACE_RET_SUCCESS) {
+        printf("%s: init mask classifier error %d!\n", __func__, ret);
+        return -1;
+    }
+#endif
 
     if (g_face_cnt <= 0)
         g_face_cnt = DEFAULT_FACE_NUMBER;
@@ -1256,6 +1373,13 @@ int rockface_control_init(void)
         printf("face data alloc failed!\n");
         return -1;
     }
+#ifdef FACE_MASK
+    g_mask_data = calloc(g_face_cnt, sizeof(struct mask_data));
+    if (!g_mask_data) {
+        printf("face data alloc failed!\n");
+        return -1;
+    }
+#endif
 
     if (access(DATABASE_PATH, F_OK)) {
         check_pre_path(BAK_PATH);
@@ -1269,7 +1393,11 @@ int rockface_control_init(void)
         if (database_init())
             return -1;
         g_face_index += database_get_data(g_face_data, g_face_cnt, sizeof(rockface_feature_t), 0,
-                                          sizeof(int), sizeof(rockface_feature_t));
+                                          sizeof(int), sizeof(rockface_feature_t), 0);
+#ifdef FACE_MASK
+        g_mask_index += database_get_data(g_mask_data, g_face_cnt, sizeof(rockface_feature_float_t), 0,
+                                          sizeof(int), sizeof(rockface_feature_float_t), 1);
+#endif
         database_exit();
     }
 
@@ -1282,8 +1410,12 @@ int rockface_control_init(void)
 #endif
     printf("face number is %d\n", g_face_index);
     sync();
-    if (rockface_control_init_library(g_face_data, g_face_index, sizeof(struct face_data), 0))
+    if (rockface_control_init_library(g_face_data, g_face_index, sizeof(struct face_data), 0, 0))
         return -1;
+#ifdef FACE_MASK
+    if (rockface_control_init_library(g_mask_data, g_mask_index, sizeof(struct mask_data), 0, 1))
+        return -1;
+#endif
 
     for (int i = 0; i < DET_BUFFER_NUM; i++) {
         if (rga_control_buffer_init(&g_detect[i].bo, &g_detect[i].fd, DET_WIDTH, DET_HEIGHT, 24))
@@ -1354,6 +1486,12 @@ void rockface_control_exit(void)
         free(g_face_data);
         g_face_data = NULL;
     }
+#ifdef FACE_MASK
+    if (g_mask_data) {
+        free(g_mask_data);
+        g_mask_data = NULL;
+    }
+#endif
 
     for (int i = 0; i < DET_BUFFER_NUM; i++) {
         rga_control_buffer_deinit(&g_detect[i].bo, g_detect[i].fd);
@@ -1372,10 +1510,19 @@ void rockface_control_database(void)
     pthread_mutex_lock(&g_lib_lock);
     memset(g_face_data, 0, g_face_cnt * sizeof(struct face_data));
     g_face_index = database_get_data(g_face_data, g_face_cnt,
-            sizeof(rockface_feature_t), 0, sizeof(int), sizeof(rockface_feature_t));
+            sizeof(rockface_feature_t), 0, sizeof(int), sizeof(rockface_feature_t), 0);
+#ifdef FACE_MASK
+    memset(g_mask_data, 0, g_face_cnt * sizeof(struct mask_data));
+    g_mask_index = database_get_data(g_mask_data, g_face_cnt,
+            sizeof(rockface_feature_float_t), 0, sizeof(int), sizeof(rockface_feature_float_t), 1);
+#endif
     rockface_control_release_library();
     rockface_control_init_library(g_face_data, g_face_index,
-            sizeof(struct face_data), 0);
+            sizeof(struct face_data), 0, 0);
+#ifdef FACE_MASK
+    rockface_control_init_library(g_mask_data, g_mask_index,
+            sizeof(struct mask_data), 0, 1);
+#endif
     pthread_mutex_unlock(&g_lib_lock);
 }
 
@@ -1407,12 +1554,13 @@ int rockface_control_delete(int id, const char *pname, bool notify, bool del)
     return 0;
 }
 
-int rockface_control_add_ui(int id, const char *name, void *feature)
+int rockface_control_add_ui(int id, const char *name, void *feature, void *mask_feature)
 {
     printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
     char user[] = USER_NAME;
     char type[] = "whiteList";
-    database_insert(feature, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
+    database_insert(feature, feature ? sizeof(rockface_feature_t) : 0, name, NAME_LEN, id, true,
+                    mask_feature, mask_feature ? sizeof(rockface_feature_float_t) : 0);
     db_monitor_face_list_add(id, (char*)name, user, type);
 
     rockface_control_database();
@@ -1426,29 +1574,43 @@ int rockface_control_add_web(int id, const char *name)
     printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
     gettimeofday(&g_last_reg_tv, NULL);
     rockface_feature_t f;
-    if (!rockface_control_get_path_feature(name, &f)) {
+    rockface_feature_float_t m;
+    float mask_score;
+    if (!rockface_control_get_path_feature(name, &f, &m, &mask_score)) {
+#if 1
+        database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, g_detect_en ? true : false, &m, sizeof(rockface_feature_float_t));
+#else
         rockface_search_result_t result;
         rockface_ret_t ret;
-        struct face_data face_data;
         char result_name[NAME_LEN];
         pthread_mutex_lock(&g_lib_lock);
-        ret = rockface_feature_search(face_handle, &f, FACE_SIMILARITY_SCORE_REGISTER, &result);
+        ret = rockface_feature_search(face_handle, mask_score < 0.5 ? &f : (rockface_feature_t *)&m,
+                                      FACE_SIMILARITY_SCORE_REGISTER, &result);
         pthread_mutex_unlock(&g_lib_lock);
         if (ret != ROCKFACE_RET_SUCCESS) {
-            database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
+            database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, g_detect_en ? true : false, &m, sizeof(rockface_feature_float_t));
         } else {
+            int id;
+            if (mask_score < 0.5) {
+                struct face_data *face_data = (struct face_data *)result.face_data;
+                id = face_data->id;
+            } else {
+                struct mask_data *mask_data = (struct mask_data *)result.face_data;
+                id = mask_data->id;
+            }
             memset(result_name, 0, NAME_LEN);
-            memcpy(&face_data, result.feature, sizeof(struct face_data));
-            database_is_id_exist(face_data.id, result_name, NAME_LEN);
+            database_is_id_exist(id, result_name, NAME_LEN);
             printf("%s is similar with %s, similarity is %f\n", name, result_name, result.similarity);
             return 2;
         }
+#endif
     } else {
         printf("%s %s fail!\n", __func__, name);
         return -1;
     }
 
-    rockface_control_database();
+    if (g_detect_en)
+        rockface_control_database();
 
     return 0;
 }
@@ -1463,7 +1625,9 @@ int rockface_control_add_local(const char *name)
     printf("add %s, %d to %s\n", name, id, DATABASE_PATH);
     gettimeofday(&g_last_reg_tv, NULL);
     rockface_feature_t f;
-    if (!rockface_control_get_path_feature(name, &f)) {
+    rockface_feature_float_t m;
+    float mask_score;
+    if (!rockface_control_get_path_feature(name, &f, &m, &mask_score)) {
         char type[] = "whiteList";
         char tmp[NAME_LEN];
         const char *begin = strrchr(name, '/');
@@ -1473,30 +1637,42 @@ int rockface_control_add_local(const char *name)
             memcpy(tmp, begin + 1, end - begin - 1);
         else
             strcpy(tmp, "unknown_user");
-
+#if 1
+        database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, g_detect_en ? true : false, &m, sizeof(rockface_feature_float_t));
+        db_monitor_face_list_add(id, (char*)name, tmp, type);
+#else
         rockface_search_result_t result;
         rockface_ret_t ret;
-        struct face_data face_data;
         char result_name[NAME_LEN];
         pthread_mutex_lock(&g_lib_lock);
-        ret = rockface_feature_search(face_handle, &f, FACE_SIMILARITY_SCORE_REGISTER, &result);
+        ret = rockface_feature_search(face_handle, mask_score < 0.5 ? &f : (rockface_feature_t *)&m,
+                                      FACE_SIMILARITY_SCORE_REGISTER, &result);
         pthread_mutex_unlock(&g_lib_lock);
         if (ret != ROCKFACE_RET_SUCCESS) {
-            database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, true);
+            database_insert(&f, sizeof(rockface_feature_t), name, NAME_LEN, id, g_detect_en ? true : false, &m, sizeof(rockface_feature_float_t));
             db_monitor_face_list_add(id, (char*)name, tmp, type);
         } else {
+            int id;
+            if (mask_score < 0.5) {
+                struct face_data *face_data = (struct face_data *)result.face_data;
+                id = face_data->id;
+            } else {
+                struct mask_data *mask_data = (struct mask_data *)result.face_data;
+                id = mask_data->id;
+            }
             memset(result_name, 0, NAME_LEN);
-            memcpy(&face_data, result.feature, sizeof(struct face_data));
-            database_is_id_exist(face_data.id, result_name, NAME_LEN);
+            database_is_id_exist(id, result_name, NAME_LEN);
             printf("%s is similar with %s, similarity is %f\n", name, result_name, result.similarity);
             return -2;
         }
+#endif
     } else {
         printf("%s %s fail!\n", __func__, name);
         return -1;
     }
 
-    rockface_control_database();
+    if (g_detect_en)
+        rockface_control_database();
 
     return id;
 }

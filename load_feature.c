@@ -103,7 +103,9 @@ int load_feature(const char *path, const char *fmt, void *data, unsigned int cnt
             if (database_is_name_exist(name))
                 continue;
             struct face_data *face_data = (struct face_data*)data + index;
-            if (get_path_feature_cb && get_path_feature_cb(name, &face_data->feature) == 0) {
+            rockface_feature_float_t m;
+            float mask_score;
+            if (get_path_feature_cb && get_path_feature_cb(name, &face_data->feature, &m, &mask_score) == 0) {
                 char tmp[NAME_LEN];
                 memset(tmp, 0, sizeof(tmp));
                 memcpy(tmp, ent->d_name, strrchr(ent->d_name, '.') - ent->d_name);
@@ -115,7 +117,7 @@ int load_feature(const char *path, const char *fmt, void *data, unsigned int cnt
                 }
                 face_data->id = id;
                 database_insert(&face_data->feature, sizeof(face_data->feature),
-                                name, sizeof(name), id, false);
+                                name, sizeof(name), id, false, &m, sizeof(m));
                 if (strstr(name, "black_list"))
                     db_monitor_face_list_add(id, name, tmp, "blackList");
                 else

@@ -21,6 +21,7 @@ enum user_state {
 };
 
 struct user_info {
+    char has_mask;
     unsigned int id;
     char sPicturePath[256];
     char sRegistrationTime[32];

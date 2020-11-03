@@ -52,6 +52,10 @@ struct face_data {
     rockface_feature_t feature;
     int id;
 };
+struct mask_data {
+    rockface_feature_float_t feature;
+    int id;
+};
 
 #ifdef __cplusplus
 }

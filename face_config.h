@@ -45,6 +45,7 @@ struct face_config {
     int live_det_th;
     int face_det_th;
     int face_rec_th;
+    int face_mask_th;
     int min_pixel;
     int corner_x;
     int corner_y;
@@ -64,6 +65,7 @@ bool get_face_config_corner_y(int *y);
 bool get_face_config_corner_x(int *x);
 bool get_face_config_min_pixel(int *pixel);
 bool get_face_config_face_rec_th(int *th);
+bool get_face_config_face_mask_th(int *th);
 bool get_face_config_face_det_th(int *th);
 bool get_face_config_live_det_th(int *th);
 bool get_face_config_live_det_en(int *en);

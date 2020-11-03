@@ -42,10 +42,10 @@ void database_bak(void);
 int database_init(void);
 void database_exit(void);
 void database_reset(void);
-int database_insert(void *data, size_t size, const char *name, size_t n_size, int id, bool sync_flag);
+int database_insert(void *data, size_t size, const char *name, size_t n_size, int id, bool sync_flag, void *mask, size_t mask_size);
 int database_record_count(void);
 int database_get_data(void *dst, const int cnt, size_t d_size, size_t d_off,
-                      size_t i_size, size_t i_off);
+                      size_t i_size, size_t i_off, int mask);
 bool database_is_name_exist(const char *name);
 bool database_is_id_exist(int id, char *name, size_t size);
 int database_get_user_name_id(void);

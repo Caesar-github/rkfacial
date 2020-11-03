@@ -41,6 +41,7 @@
 #include "face_common.h"
 
 #define DATABASE_TABLE "face_data"
+#define DATABASE_VERSION "version_0"
 
 static sqlite3 *g_db = NULL;
 static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -62,14 +63,24 @@ int database_init(void)
         return -1;
     }
     snprintf(cmd, sizeof(cmd),
-             "CREATE TABLE IF NOT EXISTS %s (data blob, name varchar(%d), id INTEGER PRIMARY KEY)",
-             DATABASE_TABLE, NAME_LEN);
+             "CREATE TABLE IF NOT EXISTS %s (data blob, name varchar(%d), id INTEGER PRIMARY KEY, mask blob, %s INTEGER)",
+             DATABASE_TABLE, NAME_LEN, DATABASE_VERSION);
     if (sqlite3_exec(g_db, cmd, 0, 0, &err) != SQLITE_OK) {
         sqlite3_close(g_db);
         g_db = NULL;
         printf("%s create table %s failed!\n", __func__, DATABASE_TABLE);
         return -1;
     }
+
+    snprintf(cmd, sizeof(cmd), "SELECT %s FROM %s;", DATABASE_VERSION, DATABASE_TABLE);
+    if (sqlite3_exec(g_db, cmd, 0, 0, &err) != SQLITE_OK) {
+        sqlite3_close(g_db);
+        g_db = NULL;
+        unlink(DATABASE_PATH);
+        printf("%s table %s %s mismatch!\n", __func__, DATABASE_TABLE, DATABASE_VERSION);
+        return database_init();
+    }
+
     database_bak();
 
     return 0;
@@ -90,7 +101,7 @@ void database_reset(void)
     pthread_mutex_unlock(&g_mutex);
 }
 
-int database_insert(void *data, size_t size, const char *name, size_t n_size, int id, bool sync_flag)
+int database_insert(void *data, size_t size, const char *name, size_t n_size, int id, bool sync_flag, void *mask, size_t mask_size)
 {
     char cmd[256];
     sqlite3_stmt *stat = NULL;
@@ -100,19 +111,21 @@ int database_insert(void *data, size_t size, const char *name, size_t n_size, in
         return -1;
     }
     pthread_mutex_lock(&g_mutex);
-    snprintf(cmd, sizeof(cmd), "REPLACE INTO %s VALUES(?, '%s', %d);", DATABASE_TABLE, name, id);
+    snprintf(cmd, sizeof(cmd), "REPLACE INTO %s VALUES(?, '%s', %d, ?, 0);", DATABASE_TABLE, name, id);
     if (sqlite3_prepare(g_db, cmd, -1, &stat, 0) != SQLITE_OK) {
         pthread_mutex_unlock(&g_mutex);
         return -1;
     }
     sqlite3_exec(g_db, "begin transaction", NULL, NULL, NULL);
     sqlite3_bind_blob(stat, 1, data, size, NULL);
+    sqlite3_bind_blob(stat, 2, mask, mask_size, NULL);
     sqlite3_step(stat);
     sqlite3_finalize(stat);
     sqlite3_exec(g_db, "commit transaction", NULL, NULL, NULL);
-    if (sync_flag)
+    if (sync_flag) {
         sync();
-    database_bak();
+        database_bak();
+    }
     pthread_mutex_unlock(&g_mutex);
 
     return 0;
@@ -139,7 +152,7 @@ int database_record_count(void)
 }
 
 int database_get_data(void *dst, const int cnt, size_t d_size, size_t d_off,
-                      size_t i_size, size_t i_off)
+                      size_t i_size, size_t i_off, int mask)
 {
     int ret = 0;
     char cmd[256];
@@ -160,8 +173,13 @@ int database_get_data(void *dst, const int cnt, size_t d_size, size_t d_off,
         ret = sqlite3_step(stat);
         if (ret != SQLITE_ROW)
             break;
-        data = sqlite3_column_blob(stat, 0);
-        size = sqlite3_column_bytes(stat, 0);
+        if (mask) {
+            data = sqlite3_column_blob(stat, 3);
+            size = sqlite3_column_bytes(stat, 3);
+        } else {
+            data = sqlite3_column_blob(stat, 0);
+            size = sqlite3_column_bytes(stat, 0);
+        }
         if (size <= d_size)
             memcpy((char*)dst + index * sum_size + d_off, data, size);
         id = sqlite3_column_int(stat, 2);
@@ -260,6 +278,7 @@ int database_get_user_name_id(void)
         return 0;
     }
 
+#if 0
     save_id = calloc(max_id + 1, sizeof(int));
     if (!save_id) {
         printf("%s: memory alloc fail!\n", __func__);
@@ -288,6 +307,7 @@ int database_get_user_name_id(void)
             goto exit;
         }
     }
+#endif
     ret_id = max_id + 1;
 
 exit:

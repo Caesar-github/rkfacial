@@ -44,7 +44,7 @@ extern "C" {
 int rockface_control_init(void);
 void rockface_control_init_thread(void);
 void rockface_control_exit(void);
-int rockface_control_get_path_feature(const char *path, void *feature);
+int rockface_control_get_path_feature(const char *path, void *feature, void *mask_feature, float *mask_score);
 int rockface_control_convert_detect(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation, int id);
 int rockface_control_convert_feature(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation, int id);
 void rockface_control_set_delete(void);
@@ -52,9 +52,11 @@ void rockface_control_set_register(void);
 int rockface_control_convert_ir(void *ptr, int width, int height, RgaSURF_FORMAT fmt, int rotation);
 void rockface_control_delete_all(void);
 int rockface_control_delete(int id, const char *pname, bool notify, bool del);
-int rockface_control_add_ui(int id, const char *name, void *feature);
+int rockface_control_add_ui(int id, const char *name, void *feature, void *mask_feature);
 int rockface_control_add_web(int id, const char *name);
 int rockface_control_add_local(const char *name);
+void rockface_control_database(void);
+void rockface_control_set_detect_en(int en);
 
 #ifdef __cplusplus
 }

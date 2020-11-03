@@ -65,6 +65,10 @@ if(DEFINED IR_TEST_DATA)
 add_definitions(-DIR_TEST_DATA)
 endif()
 
+if(DEFINED FACE_MASK)
+add_definitions(-DFACE_MASK)
+endif()
+
 add_library(rkfacial SHARED ${SRC})
 target_link_libraries(rkfacial ${LIB})
 

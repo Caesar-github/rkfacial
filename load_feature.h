@@ -39,7 +39,7 @@ extern "C" {
 
 int count_file(const char *path, char *fmt);
 int load_feature(const char *path, const char *fmt, void *data, unsigned int cnt);
-typedef int (*get_path_feature_t)(const char *path, void *feature);
+typedef int (*get_path_feature_t)(const char *path, void *feature, void *mask_feature, float *mask_score);
 void register_get_path_feature(get_path_feature_t cb);
 
 #ifdef __cplusplus

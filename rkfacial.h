@@ -18,9 +18,11 @@ enum user_state {
     USER_STATE_REAL_UNREGISTERED,
     USER_STATE_REAL_REGISTERED_WHITE,
     USER_STATE_REAL_REGISTERED_BLACK,
+    USER_STATE_REAL_IDENTITY,
 };
 
 struct user_info {
+    char sIdentityPath[256];
     char has_mask;
     unsigned int id;
     char sPicturePath[256];

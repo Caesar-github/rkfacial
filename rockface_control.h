@@ -57,6 +57,7 @@ int rockface_control_add_web(int id, const char *name);
 int rockface_control_add_local(const char *name);
 void rockface_control_database(void);
 void rockface_control_set_detect_en(int en);
+void rockface_control_set_identity_en(int en, char *path);
 
 #ifdef __cplusplus
 }

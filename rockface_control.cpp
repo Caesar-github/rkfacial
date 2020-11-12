@@ -172,6 +172,9 @@ static int g_test_fd;
 
 static int g_detect_en = 1;
 
+static int g_identity_en = 0;
+static char g_identity_path[256];
+
 void rockface_control_set_detect_en(int en)
 {
     if (en) {
@@ -185,6 +188,13 @@ void rockface_control_set_detect_en(int en)
         system("echo 1512000 > /sys/devices/system/cpu/cpufreq/policy0/scaling_setspeed");
     }
     g_detect_en = en;
+}
+
+void rockface_control_set_identity_en(int en, char *path)
+{
+    if (path)
+        strncpy(g_identity_path, path, sizeof(g_identity_path) - 1);
+    g_identity_en = en;
 }
 
 void rockface_start_test(void)
@@ -676,6 +686,17 @@ int rockface_control_get_path_feature(const char *path, void *feature, void *mas
     return ret;
 }
 
+void rockface_set_user_info(struct user_info *info, enum user_state state,
+                            rockface_det_t *ir_face, rockface_det_t *rgb_face)
+{
+    memset(info, 0, sizeof(struct user_info));
+    info->state = state;
+    if (ir_face)
+        memcpy(&info->ir_face, ir_face, sizeof(rockface_det_t));
+    if (rgb_face)
+        memcpy(&info->rgb_face, rgb_face, sizeof(rockface_det_t));
+}
+
 static bool rockface_control_search(rockface_image_t *image, void *data, int *index, int cnt,
                               size_t size, size_t offset, rockface_det_t *face, int reg,
                               struct face_data **face_data, struct mask_data **mask_data, float *similarity)
@@ -688,6 +709,34 @@ static bool rockface_control_search(rockface_image_t *image, void *data, int *in
 
     if (rockface_control_get_feature(image, &feature, &mask, face, false, &mask_score) == 0) {
         //printf("g_total_cnt = %d\n", ++g_total_cnt);
+        if (g_identity_en) {
+            rockface_feature_t f;
+            rockface_feature_float_t m;
+            float s;
+            if (!rockface_control_get_path_feature(g_identity_path, &f, &m, &s)) {
+                float simi;
+                bool pass = false;
+                if (mask_score < 0.5) {
+                    rockface_feature_compare((rockface_feature_t *)&feature, (rockface_feature_t *)&f, &simi);
+                    if (simi < get_face_recognition_score())
+                        pass = true;
+                } else {
+                    rockface_feature_compare((rockface_feature_t *)&mask, (rockface_feature_t *)&m, &simi);
+                    if (simi < get_face_mask_recognition_score())
+                        pass = true;
+                }
+                if (pass) {
+                    play_wav_signal(PLEASE_GO_THROUGH_WAV);
+                    if (rkfacial_paint_info_cb) {
+                        struct user_info info;
+                        rockface_set_user_info(&info, USER_STATE_REAL_IDENTITY, &g_ir_face, &g_feature.face);
+                        strncpy(info.sIdentityPath, g_identity_path, sizeof(info.sIdentityPath) - 1);
+                        rkfacial_paint_info_cb(&info, true);
+                    }
+                }
+            }
+            return false; /* identity enable always return false */
+        }
         pthread_mutex_lock(&g_lib_lock);
         TEST_RESULT_INC(rgb_search_total);
         ret = rockface_feature_search(face_handle,
@@ -959,17 +1008,6 @@ static bool rockface_control_detect_ir(void *ptr, int width, int height, RgaSURF
     TEST_RESULT_INC(ir_detect_ok);
 
     return true;
-}
-
-void rockface_set_user_info(struct user_info *info, enum user_state state,
-                            rockface_det_t *ir_face, rockface_det_t *rgb_face)
-{
-    memset(info, 0, sizeof(struct user_info));
-    info->state = state;
-    if (ir_face)
-        memcpy(&info->ir_face, ir_face, sizeof(rockface_det_t));
-    if (rgb_face)
-        memcpy(&info->rgb_face, rgb_face, sizeof(rockface_det_t));
 }
 
 static void save_ir(const char *path)
@@ -1268,7 +1306,7 @@ static void *rockface_control_feature_thread(void *arg)
                 }
             }
         } else {
-            if (rkfacial_paint_info_cb) {
+            if (!g_identity_en && rkfacial_paint_info_cb) {
                 struct user_info info;
                 rockface_set_user_info(&info, USER_STATE_REAL_UNREGISTERED, &g_ir_face, &g_feature.face);
                 rkfacial_paint_info_cb(&info, true);

@@ -278,6 +278,7 @@ static void *process(void *arg)
     struct v4l2_buffer buf;
     rga_info_t src, dst;
     int id = 0;
+    RgaSURF_FORMAT fmt;
 
     memset(&buf, 0, sizeof(buf));
     buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -290,12 +291,13 @@ static void *process(void *arg)
         vpu_decode_jpeg_doing(&g_decode, g_map_buf[buf.index].start, buf.bytesused,
                               g_dec_fd, g_dec_bo.ptr);
 
-        if (!rockface_control_convert_detect(g_dec_bo.ptr, g_width, g_height, RK_FORMAT_YCbCr_420_SP, g_rotation, id))
-            rockface_control_convert_feature(g_dec_bo.ptr, g_width, g_height, RK_FORMAT_YCbCr_420_SP, g_rotation, id);
+        fmt = (g_decode.fmt == MPP_FMT_YUV422SP ? RK_FORMAT_YCbCr_422_SP : RK_FORMAT_YCbCr_420_SP);
+        if (!rockface_control_convert_detect(g_dec_bo.ptr, g_width, g_height, fmt, g_rotation, id))
+            rockface_control_convert_feature(g_dec_bo.ptr, g_width, g_height, fmt, g_rotation, id);
 
         pthread_mutex_lock(&g_display_lock);
         if (g_display_cb)
-            g_display_cb(g_dec_bo.ptr, g_dec_fd, RK_FORMAT_YCbCr_420_SP,
+            g_display_cb(g_dec_bo.ptr, g_dec_fd, fmt,
                     g_width, g_height, g_rotation);
         pthread_mutex_unlock(&g_display_lock);
 

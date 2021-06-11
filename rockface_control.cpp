@@ -587,7 +587,7 @@ static int rockface_control_get_feature(rockface_image_t *in_image,
     rockface_landmark_t landmark;
     TEST_RESULT_INC(rgb_landmark_total);
     ret = rockface_landmark5(face_handle, in_image, &(in_face->box), &landmark);
-    if (ret != ROCKFACE_RET_SUCCESS) {
+    if (ret != ROCKFACE_RET_SUCCESS || landmark.score < 0.3) {
         if (reg)
             printf("rockface_landmark5 fail!\n");
         return -1;
